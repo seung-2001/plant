@@ -1,0 +1,79 @@
+요청 (Frontend → Backend)
+POST /register
+요청 바디:
+
+json
+
+{
+  "email": "user@example.com",
+  "password": "securepassword"
+}
+
+응답 바디 (성공 시):
+
+json
+
+{
+  "message": "회원가입 성공! 이메일 인증을 진행하세요."
+}
+
+응답 바디 (실패 시):
+json
+
+{
+  "message": "이미 등록된 이메일입니다."
+}
+
+2. 로그인 API 설계 (Login)
+요청 (Frontend → Backend)
+POST /login
+
+요청 바디:
+
+json
+{
+  "email": "user@example.com",
+  "password": "securepassword"
+}
+
+응답 바디 (성공 시):
+
+json
+
+{
+  "access_token": "jwt_token_here"
+}
+
+응답 바디 (실패 시):
+json
+
+{
+  "message": "이메일 또는 비밀번호가 잘못되었습니다."
+}
+
+3. 이메일 인증 API 설계 (Email Verification)
+요청 (Frontend → Backend)
+
+GET /verify-email?token=YOUR_TOKEN
+
+성공 시:
+
+json
+
+{
+  "message": "이메일 인증 성공!"
+}
+실패 시:
+
+json
+
+{
+  "message": "유효하지 않은 토큰입니다."
+}
+
+4. 로그인 후 JWT 사용법
+
+JWT 저장 (로그인 시)
+
+javascript
+localStorage.setItem("token", access_token);
