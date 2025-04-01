@@ -13,22 +13,21 @@ import {
   Alert,
 } from "react-native";
 import { router } from "expo-router";
+import { useAuth } from '../../context/auth';
 
 // 로그인 화면 컴포넌트
 export default function LoginScreen() {
   // 이메일과 비밀번호 상태 관리
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const { signIn } = useAuth();
 
   // 로그인 처리 함수
-  const handleLogin = () => {
-    // 테스트용 계정 정보
-    if (email === "test@test.com" && password === "test1234") {
-      // 로그인 성공 시 메인 화면으로 이동
-      router.replace("/tabs/map");
-    } else {
-      // 로그인 실패 시 알림 표시
-      Alert.alert("로그인 실패", "이메일 또는 비밀번호가 올바르지 않습니다.");
+  const handleLogin = async () => {
+    try {
+      await signIn(email, password);
+    } catch (error) {
+      Alert.alert('로그인 실패', '이메일과 비밀번호를 확인해주세요.');
     }
   };
 

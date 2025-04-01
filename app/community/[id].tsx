@@ -76,7 +76,7 @@ export default function CommunityDetailScreen() {
         {/* 게시글 내용 */}
         <View style={styles.postContent}>
           <Text style={styles.title}>{post.title}</Text>
-          <Text style={styles.content}>{post.content}</Text>
+          <Text style={styles.postContentText}>{post.content}</Text>
         </View>
 
         {/* 게시글 통계 */}
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 10,
   },
-  content: {
+  postContentText: {
     fontSize: 16,
     lineHeight: 24,
     color: "#333",
