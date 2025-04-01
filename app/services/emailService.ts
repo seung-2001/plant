@@ -35,4 +35,15 @@ export const emailService = {
       return false;
     }
   },
-}; 
+};
+
+// 이메일 유효성 검사
+export const validateEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+// Expo Router를 위한 빈 컴포넌트 export
+export default function EmailService() {
+  return null;
+} 

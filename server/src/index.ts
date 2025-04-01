@@ -9,9 +9,25 @@ dotenv.config();
 
 const app = express();
 
-// 미들웨어 설정
-app.use(cors());
+// CORS 설정 (가장 먼저 적용)
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:19006', 'http://localhost:19000', 'http://192.168.200.100:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: true
+}));
+
+// 요청 본문 파싱 미들웨어
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// 요청 로깅 미들웨어
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+  next();
+});
 
 // 데이터베이스 연결 확인
 pool.query('SELECT NOW()', (err, res) => {
@@ -31,7 +47,7 @@ app.get('/', (req, res) => {
 });
 
 // 서버 시작
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const PORT = Number(process.env.PORT) || 3000;
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`서버가 포트 ${PORT}에서 실행 중입니다.`);
 }); 
