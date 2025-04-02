@@ -1,13 +1,24 @@
+import dotenv from 'dotenv';
+import path from 'path';
+
+// 환경 변수 설정 (가장 먼저 실행)
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import pool from './config/db';
 
-// 환경 변수 설정
-dotenv.config();
-
 const app = express();
+
+// DB 연결 설정 출력
+console.log('DB 연결 설정:', {
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  password: '****',
+  port: process.env.DB_PORT,
+});
 
 // CORS 설정 (가장 먼저 적용)
 app.use(cors({

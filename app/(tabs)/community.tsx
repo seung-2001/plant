@@ -4,12 +4,83 @@
 // - 게시글 목록 표시
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, TextInput, SectionList } from 'react-native';
 import { FontAwesome, Ionicons } from '@expo/vector-icons';
 import { router } from "expo-router";
+import { useAuth } from '../../context/auth';
+
+// 임시 게시물 데이터
+const DUMMY_POSTS = [
+  {
+    id: '1',
+    user: {
+      name: '김봉사',
+      avatar: 'https://via.placeholder.com/50',
+    },
+    content: '오늘 첫 봉사활동 다녀왔어요! 보람찼습니다 😊',
+    image: 'https://via.placeholder.com/300',
+    likes: 24,
+    comments: 5,
+    createdAt: '10분 전',
+  },
+  {
+    id: '2',
+    user: {
+      name: '이나눔',
+      avatar: 'https://via.placeholder.com/50',
+    },
+    content: '주말 봉사 모임 함께하실 분 구해요~\n이번 주 토요일 오전 10시, 시청 앞 집결입니다!',
+    likes: 15,
+    comments: 8,
+    createdAt: '1시간 전',
+  },
+];
+
+interface Post {
+  id: string;
+  user: {
+    name: string;
+    avatar: string;
+  };
+  content: string;
+  image?: string;
+  likes: number;
+  comments: number;
+  createdAt: string;
+}
+
+interface Notice {
+  id: number;
+  title: string;
+  date: string;
+  isImportant: boolean;
+}
+
+interface Story {
+  id: number;
+  author: string;
+  title: string;
+  content: string;
+  date: string;
+  likes: number;
+  comments: number;
+  image: string;
+}
+
+interface SectionData {
+  type: 'notices' | 'stories' | 'posts';
+  items: Notice[] | Story[] | Post[];
+}
+
+interface SectionType {
+  title: string;
+  data: SectionData[];
+}
 
 export default function CommunityScreen() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'stories' | 'posts'>('stories');
+  const { user } = useAuth();
 
   const notices = [
     {
@@ -49,8 +120,150 @@ export default function CommunityScreen() {
     },
   ];
 
+  const renderNotices = (data: SectionData) => {
+    if (data.type !== 'notices') return <View />;
+    const items = data.items as Notice[];
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>공지사항</Text>
+        {items.map((notice) => (
+          <TouchableOpacity
+            key={notice.id}
+            style={styles.noticeItem}
+            onPress={() => router.push(`/community/${notice.id}`)}
+          >
+            <View style={styles.noticeContent}>
+              {notice.isImportant && (
+                <Text style={styles.importantBadge}>중요</Text>
+              )}
+              <Text style={styles.noticeTitle}>{notice.title}</Text>
+            </View>
+            <Text style={styles.noticeDate}>{notice.date}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+
+  const renderStories = (data: SectionData) => {
+    if (data.type !== 'stories') return <View />;
+    const items = data.items as Story[];
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>봉사자 이야기</Text>
+        {items.map((story) => (
+          <TouchableOpacity
+            key={story.id}
+            style={styles.storyItem}
+            onPress={() => router.push(`/community/${story.id}`)}
+          >
+            <Image source={{ uri: story.image }} style={styles.storyImage} />
+            <View style={styles.storyContent}>
+              <Text style={styles.storyTitle}>{story.title}</Text>
+              <Text style={styles.storyPreview} numberOfLines={2}>
+                {story.content}
+              </Text>
+              <View style={styles.storyFooter}>
+                <Text style={styles.storyAuthor}>{story.author}</Text>
+                <Text style={styles.storyDate}>{story.date}</Text>
+                <View style={styles.storyStats}>
+                  <FontAwesome name="heart" size={14} color="#FF6B00" />
+                  <Text style={styles.storyStatText}>{story.likes}</Text>
+                  <FontAwesome name="comment" size={14} color="#666" style={styles.commentIcon} />
+                  <Text style={styles.storyStatText}>{story.comments}</Text>
+                </View>
+              </View>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+
+  const renderPosts = (data: SectionData) => {
+    if (data.type !== 'posts') return <View />;
+    const items = data.items as Post[];
+    return (
+      <View style={styles.section}>
+        {items.map((item) => (
+          <View key={item.id} style={styles.storyItem}>
+            {/* 게시물 헤더 */}
+            <View style={styles.postHeader}>
+              <View style={styles.userInfo}>
+                <Image source={{ uri: item.user.avatar }} style={styles.avatar} />
+                <Text style={styles.userName}>{item.user.name}</Text>
+              </View>
+              <TouchableOpacity>
+                <Text style={styles.moreButton}>⋮</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* 게시물 내용 */}
+            <Text style={styles.postContent}>{item.content}</Text>
+
+            {/* 게시물 이미지 */}
+            {item.image && (
+              <Image source={{ uri: item.image }} style={styles.postImage} />
+            )}
+
+            {/* 게시물 하단 */}
+            <View style={styles.postFooter}>
+              <View style={styles.actions}>
+                <TouchableOpacity style={styles.actionButton}>
+                  <Text>❤️ {item.likes}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionButton}>
+                  <Text>💬 {item.comments}</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.timestamp}>{item.createdAt}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  const sections: SectionType[] = [
+    {
+      title: '공지사항',
+      data: [{ type: 'notices' as const, items: notices }],
+    },
+    ...(activeTab === 'stories' ? [{
+      title: '봉사자 이야기',
+      data: [{ type: 'stories' as const, items: stories }],
+    }] : [{
+      title: '게시물',
+      data: [{ type: 'posts' as const, items: DUMMY_POSTS }],
+    }]),
+  ];
+
+  const renderItem = ({ item }: { item: SectionData }) => {
+    switch (item.type) {
+      case 'notices':
+        return renderNotices(item);
+      case 'stories':
+        return renderStories(item);
+      case 'posts':
+        return renderPosts(item);
+      default:
+        return <View />;
+    }
+  };
+
   return (
     <View style={styles.container}>
+      {/* 헤더 */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>커뮤니티</Text>
+        <TouchableOpacity 
+          style={styles.writeButton}
+          onPress={() => router.push('/community/write')}
+        >
+          <Text style={styles.writeButtonText}>글쓰기</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* 검색바 */}
       <View style={styles.searchBar}>
         <Ionicons name="search" size={20} color="#666" />
@@ -62,57 +275,38 @@ export default function CommunityScreen() {
         />
       </View>
 
-      <ScrollView style={styles.content}>
-        {/* 공지사항 섹션 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>공지사항</Text>
-          {notices.map((notice) => (
-            <TouchableOpacity
-              key={notice.id}
-              style={styles.noticeItem}
-              onPress={() => router.push(`/community/${notice.id}`)}
-            >
-              <View style={styles.noticeContent}>
-                {notice.isImportant && (
-                  <Text style={styles.importantBadge}>중요</Text>
-                )}
-                <Text style={styles.noticeTitle}>{notice.title}</Text>
-              </View>
-              <Text style={styles.noticeDate}>{notice.date}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+      {/* 탭 메뉴 */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'stories' && styles.activeTab]}
+          onPress={() => setActiveTab('stories')}
+        >
+          <Text style={[styles.tabText, activeTab === 'stories' && styles.activeTabText]}>
+            봉사자 이야기
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'posts' && styles.activeTab]}
+          onPress={() => setActiveTab('posts')}
+        >
+          <Text style={[styles.tabText, activeTab === 'posts' && styles.activeTabText]}>
+            게시물
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-        {/* 스토리 섹션 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>봉사자 이야기</Text>
-          {stories.map((story) => (
-            <TouchableOpacity
-              key={story.id}
-              style={styles.storyItem}
-              onPress={() => router.push(`/community/${story.id}`)}
-            >
-              <Image source={{ uri: story.image }} style={styles.storyImage} />
-              <View style={styles.storyContent}>
-                <Text style={styles.storyTitle}>{story.title}</Text>
-                <Text style={styles.storyPreview} numberOfLines={2}>
-                  {story.content}
-                </Text>
-                <View style={styles.storyFooter}>
-                  <Text style={styles.storyAuthor}>{story.author}</Text>
-                  <Text style={styles.storyDate}>{story.date}</Text>
-                  <View style={styles.storyStats}>
-                    <FontAwesome name="heart" size={14} color="#FF6B00" />
-                    <Text style={styles.storyStatText}>{story.likes}</Text>
-                    <FontAwesome name="comment" size={14} color="#666" style={styles.commentIcon} />
-                    <Text style={styles.storyStatText}>{story.comments}</Text>
-                  </View>
-                </View>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
+      <SectionList
+        sections={sections}
+        keyExtractor={(item, index) => String(index)}
+        renderItem={renderItem}
+        renderSectionHeader={({ section }) => (
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionHeaderTitle}>{section.title}</Text>
+          </View>
+        )}
+        stickySectionHeadersEnabled={true}
+        showsVerticalScrollIndicator={false}
+      />
     </View>
   );
 }
@@ -121,6 +315,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FF9500',
+  },
+  writeButton: {
+    backgroundColor: '#FF9500',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  writeButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
   searchBar: {
     flexDirection: 'row',
@@ -185,6 +402,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 8,
     overflow: 'hidden',
+    padding: 15,
+    borderWidth: 1,
+    borderColor: '#eee',
   },
   storyImage: {
     width: '100%',
@@ -227,5 +447,98 @@ const styles = StyleSheet.create({
   },
   commentIcon: {
     marginLeft: 15,
+  },
+  postContainer: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  postHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+  },
+  userName: {
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  moreButton: {
+    fontSize: 20,
+    color: '#666',
+  },
+  postContent: {
+    fontSize: 16,
+    lineHeight: 22,
+    marginBottom: 10,
+  },
+  postImage: {
+    width: '100%',
+    height: 300,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  postFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: 15,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  timestamp: {
+    color: '#666',
+    fontSize: 14,
+  },
+  sectionHeader: {
+    backgroundColor: '#f5f5f5',
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  sectionHeaderTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#666',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  activeTab: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#FF9500',
+  },
+  tabText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  activeTabText: {
+    color: '#FF9500',
+    fontWeight: 'bold',
   },
 }); 

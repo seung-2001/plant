@@ -1,4 +1,4 @@
-import { pool } from './index';
+import pool from '../config/db';
 
 const initDatabase = async () => {
   try {

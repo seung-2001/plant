@@ -1,5 +1,7 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 // API 기본 설정
-export const API_BASE_URL = 'http://192.168.200.100:3000/api';
+export const API_URL = 'http://192.168.200.100:3000/api'; // 우리 서버 URL
 
 // API 엔드포인트
 export const API_ENDPOINTS = {
@@ -30,90 +32,57 @@ export const API_CONFIG = {
   retryDelay: 1000, // 1초 간격으로 재시도
 };
 
-// API 요청 함수
-export const apiRequest = async (url: string, options: RequestInit = {}) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
+interface ApiRequestOptions {
+  method: string;
+  body?: string;
+  headers?: Record<string, string>;
+}
 
+export async function apiRequest(endpoint: string, options: ApiRequestOptions) {
   try {
-    console.log('[API 요청]', {
-      url,
-      method: options.method,
-      headers: {
-        ...getHeaders(),
-        ...options.headers,
-      }
-    });
-
-    if (options.body) {
-      console.log('[API 요청 body]', options.body);
-    }
-
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        ...getHeaders(),
-        ...options.headers,
-      },
-      mode: 'cors'
-    });
-
-    clearTimeout(timeoutId);
-
-    console.log('[API 응답]', {
-      status: response.status,
-      statusText: response.statusText,
-      headers: Object.fromEntries(response.headers.entries())
-    });
+    const token = await AsyncStorage.getItem('userToken');
     
-    let data;
-    try {
-      const text = await response.text();
-      console.log('[API 응답 텍스트]', text);
-      
-      if (text && text.trim()) {
-        try {
-          data = JSON.parse(text);
-          console.log('[API 응답 데이터]', data);
-          
-          // 응답 데이터 구조 확인
-          if (data && typeof data === 'object') {
-            console.log('[API 응답 데이터 구조]', {
-              keys: Object.keys(data),
-              hasId: 'id' in data,
-              hasEmail: 'email' in data,
-              hasName: 'name' in data,
-              idType: typeof data.id,
-              emailType: typeof data.email,
-              nameType: typeof data.name
-            });
-          }
-        } catch (parseError) {
-          console.error('[API 응답 파싱 실패]', parseError);
-          data = {};
-        }
-      } else {
-        console.log('[API 응답 없음]');
-        data = {};
-      }
-    } catch (error) {
-      console.error('[API 응답 읽기 실패]', error);
-      data = {};
-    }
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...options.headers,
+    };
+
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+
+    const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(`API 오류: ${response.status} ${response.statusText}`);
+      throw new Error(data.message || 'API 요청 실패');
     }
 
     return data;
   } catch (error) {
-    clearTimeout(timeoutId);
-    console.error('[API 요청 실패]', error);
+    console.error('API 요청 중 오류 발생:', error);
     throw error;
   }
-};
-  
+}
+
+// 토큰 저장
+export async function saveToken(token: string) {
+  try {
+    await AsyncStorage.setItem('userToken', token);
+  } catch (error) {
+    console.error('토큰 저장 중 오류 발생:', error);
+  }
+}
+
+// 토큰 삭제
+export async function removeToken() {
+  try {
+    await AsyncStorage.removeItem('userToken');
+  } catch (error) {
+    console.error('토큰 삭제 중 오류 발생:', error);
+  }
+}
 
 // Expo Router를 위한 빈 컴포넌트 export
 export default function ApiConfig() {
