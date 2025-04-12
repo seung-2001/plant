@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL, API_ENDPOINTS, getHeaders } from '../app/config/api';
+import { API_ENDPOINTS, API_URL } from '../app/config/api';
+import { apiRequest } from '../app/config/api';
+import { useRouter } from 'expo-router';
 
 interface User {
   id: string;
@@ -13,7 +15,7 @@ interface AuthContextType {
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<void>;
-  signOut: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,6 +25,7 @@ const AUTH_TOKEN_KEY = 'auth_token';
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     checkAuthState();
@@ -32,13 +35,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
       if (token) {
-        // TODO: 토큰 유효성 검증 API 호출
-        // 임시로 토큰이 있으면 로그인 상태로 처리
-        setUser({
-          id: '1',
-          name: '사용자',
-          email: 'user@example.com'
-        });
+        // 저장된 사용자 정보 가져오기
+        const userEmail = await AsyncStorage.getItem('user_email');
+        if (userEmail) {
+          setUser({
+            id: userEmail,
+            name: userEmail.split('@')[0],
+            email: userEmail
+          });
+        }
       }
     } catch (error) {
       console.error('Auth state check failed:', error);
@@ -49,106 +54,81 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string, name: string) => {
     try {
-      console.log('API 요청 시작:', `${API_BASE_URL}${API_ENDPOINTS.AUTH.REGISTER}`);
+      console.log('회원가입 시도:', { email });
+      console.log('API 엔드포인트:', API_ENDPOINTS.AUTH.REGISTER);
       
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5초 타임아웃
-
-      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.AUTH.REGISTER}`, {
+      const requestBody = { email, password, name };
+      console.log('요청 본문:', requestBody);
+      
+      const response = await apiRequest(API_ENDPOINTS.AUTH.REGISTER, {
         method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ email, password, name }),
-        signal: controller.signal
+        body: requestBody,
+      }).catch(error => {
+        console.error('회원가입 API 호출 실패:', error);
+        if (error.message.includes('서버에 연결할 수 없습니다')) {
+          throw new Error('서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.');
+        }
+        throw error;
       });
-
-      clearTimeout(timeoutId);
-      console.log('API 응답 상태:', response.status);
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('API 에러 응답:', errorData);
-        throw new Error(errorData.message || '회원가입에 실패했습니다.');
-      }
-
-      const data = await response.json();
-      console.log('API 성공 응답:', data);  // 서버에서 직접 { id, email, name }을 반환
-
-      // 서버 응답 데이터를 User 타입에 맞게 변환
-      const userData: User = {
-        id: String(data.id),  // id를 문자열로 변환
-        email: data.email,    // 서버에서 직접 반환된 email
-        name: data.name       // 서버에서 직접 반환된 name
-      };
-
-      console.log('변환된 사용자 데이터:', userData);
-      
-      // 회원가입 성공 후 자동 로그인
-      await signIn(email, password);
-    } catch (error: any) {
-      console.error('회원가입 API 호출 실패:', error);
-      if (error.name === 'AbortError') {
-        throw new Error('서버 응답 시간이 초과되었습니다. 네트워크 연결을 확인해주세요.');
-      }
-      throw error;
-    }
-  };
-
-  const signIn = async (email: string, password: string) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.AUTH.LOGIN}`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || '로그인에 실패했습니다.');
-      }
-
-      const data = await response.json();
-      console.log('로그인 응답:', data);
-
-      // 서버 응답에서 사용자 데이터 추출
-      const userData: User = {
-        id: String(data.id),
-        email: data.email,
-        name: data.name
-      };
-
-      // 임시 토큰 생성 (나중에 서버에서 제공하는 실제 토큰으로 교체 필요)
-      const tempToken = `temp_token_${Date.now()}`;
-      await AsyncStorage.setItem(AUTH_TOKEN_KEY, tempToken);
-      
-      setUser(userData);
-      console.log('로그인 성공:', userData);
+      console.log('회원가입 성공:', response);
+      return response;
     } catch (error) {
-      console.error('로그인 실패:', error);
-      throw error;
+      console.error('회원가입 중 오류 발생:', error);
+      if (error instanceof Error) {
+        throw new Error(error.message);
+      }
+      throw new Error('서버 연결에 실패했습니다. 다시 시도해주세요.');
     }
   };
 
-  const signOut = async () => {
+  const signIn = async (email: string, password: string): Promise<void> => {
+    try {
+      console.log('로그인 시도:', email);
+      const response = await apiRequest('/login', {
+        method: 'POST',
+        body: { email, password },
+      });
+      
+      if (response.access_token) {
+        console.log('로그인 성공');
+        await AsyncStorage.setItem(AUTH_TOKEN_KEY, response.access_token);
+        await AsyncStorage.setItem('user_email', email);  // 이메일 저장
+        setUser({ id: email, email, name: email.split('@')[0] });
+      } else {
+        console.log('로그인 실패: 토큰 없음');
+        throw new Error('로그인에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('로그인 오류:', error);
+      throw error instanceof Error ? error : new Error('로그인 중 오류가 발생했습니다.');
+    }
+  };
+
+  const logout = async () => {
     try {
       await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+      await AsyncStorage.removeItem('user_email');  // 이메일 제거
       setUser(null);
+      router.replace('/login');
     } catch (error) {
-      console.error('Sign out failed:', error);
-      throw error;
+      console.error('로그아웃 중 오류 발생:', error);
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, isLoading, signIn, signUp, logout }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-} 
+};
+
+export default AuthProvider; 

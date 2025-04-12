@@ -1,13 +1,31 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // API 기본 설정
-export const API_URL = 'http://192.168.200.100:3000/api'; // 우리 서버 URL
+export const API_URL = 'http://192.168.200.119:5000';
+export const API_BASE_URL = API_URL;
 
 // API 엔드포인트
 export const API_ENDPOINTS = {
   AUTH: {
-    LOGIN: '/auth/login',
-    REGISTER: '/auth/register',
+    LOGIN: '/login',
+    REGISTER: '/add_user',
+    PROFILE: '/get_users',  // 임시로 사용자 목록 조회 엔드포인트 사용
+  },
+  POSTS: {
+    LIST: '/posts',
+    DETAIL: (id: string) => `/posts/${id}`,
+    CREATE: '/posts',
+    UPDATE: '/posts/:id',
+    DELETE: '/posts/:id',
+  },
+  VOLUNTEERS: {
+    LIST: '/volunteers',
+    DETAIL: (id: string) => `/volunteers/${id}`,
+    CREATE: '/volunteers',
+    UPDATE: '/volunteers/:id',
+    DELETE: '/volunteers/:id',
+    JOIN: '/volunteers/:id/join',
+    LEAVE: '/volunteers/:id/leave',
   },
 };
 
@@ -27,41 +45,52 @@ export const getHeaders = (token?: string) => {
 
 // API 요청 설정
 export const API_CONFIG = {
-  timeout: 10000, // 10초
-  retries: 3, // 3번 재시도
-  retryDelay: 1000, // 1초 간격으로 재시도
+  timeout: 10000, // 10초로 줄임
+  retries: 3,
+  retryDelay: 1000,
 };
 
-interface ApiRequestOptions {
-  method: string;
-  body?: string;
+export interface ApiRequestOptions {
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  url: string;
+  data?: any;
+  params?: Record<string, string>;
   headers?: Record<string, string>;
+  signal?: AbortSignal;
 }
 
-export async function apiRequest(endpoint: string, options: ApiRequestOptions) {
-  try {
-    const token = await AsyncStorage.getItem('userToken');
-    
-    const headers = {
+export async function apiRequest(options: ApiRequestOptions) {
+  const { method, url, data, params, headers = {}, signal } = options;
+  
+  const requestOptions: RequestInit = {
+    method,
+    headers: {
       'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
-    };
+      ...headers,
+    },
+    signal,
+  };
 
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      ...options,
-      headers,
-    });
+  if (data) {
+    requestOptions.body = JSON.stringify(data);
+  }
 
-    const data = await response.json();
+  const queryString = params ? new URLSearchParams(params).toString() : '';
+  const fullUrl = queryString ? `${API_URL}${url}?${queryString}` : `${API_URL}${url}`;
+
+  try {
+    const response = await fetch(fullUrl, requestOptions);
+    const responseData = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.message || 'API 요청 실패');
+      throw new Error(responseData.error || 'API 요청 실패');
     }
 
-    return data;
+    return responseData;
   } catch (error) {
-    console.error('API 요청 중 오류 발생:', error);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('요청 시간이 초과되었습니다');
+    }
     throw error;
   }
 }

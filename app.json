@@ -28,10 +28,12 @@
     },
     "scheme": "plant",
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-location"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "newArchEnabled": true
   }
 }

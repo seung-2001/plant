@@ -3,7 +3,7 @@
 // - 댓글 목록 표시
 // - 댓글 작성 기능
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -13,103 +13,121 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  BackHandler,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, Stack, useRouter } from "expo-router";
 
 // 커뮤니티 게시글 상세 화면 컴포넌트
-export default function CommunityDetailScreen() {
+export default function PostDetailScreen() {
   const { id } = useLocalSearchParams();
+  const [isLiked, setIsLiked] = useState(false);
   const [comment, setComment] = useState("");
+  const router = useRouter();
 
-  // 게시글 정보
+  // 안드로이드 뒤로가기 버튼 처리
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      router.push('/(tabs)/community');
+      return true;
+    });
+
+    return () => backHandler.remove();
+  }, []);
+
+  // 임시 데이터
   const post = {
-    author: "김봉사",
-    title: "어린이집 봉사활동 후기",
-    content:
-      "오늘 서울시립어린이집에서 봉사활동을 다녀왔습니다. 아이들과 함께 놀이를 하고, 간식을 나누며 즐거운 시간을 보냈습니다. 특히 아이들의 순수한 미소가 인상적이었습니다. 다음에도 기회가 된다면 또 참여하고 싶습니다.",
-    date: "2024-03-15",
-    likes: 12,
-    comments: [
+    id: '1',
+    image: 'https://picsum.photos/400',
+    description: '오늘 키우는 식물의 성장 과정을 공유합니다 🌱',
+    likes: 120,
+    commentCount: 15,
+    createdAt: '2시간 전',
+    user: {
+      id: '1',
+      name: 'plant_lover',
+      avatar: 'https://picsum.photos/200'
+    },
+    commentList: [
       {
-        id: "1",
-        author: "이봉사",
-        content: "저도 참여했는데 정말 좋은 경험이었어요!",
-        date: "2024-03-15",
-        likes: 3,
+        id: '1',
+        user: {
+          name: 'plant_friend',
+          avatar: 'https://picsum.photos/201'
+        },
+        text: '정말 예쁘네요!',
+        createdAt: '1시간 전'
       },
-      {
-        id: "2",
-        author: "박봉사",
-        content: "다음 봉사활동도 함께 가요!",
-        date: "2024-03-15",
-        likes: 2,
-      },
-    ],
-  };
-
-  // 댓글 작성 처리 함수
-  const handleCommentSubmit = () => {
-    if (comment.trim()) {
-      // TODO: 댓글 작성 로직 구현
-      setComment("");
-    }
+      // ... 더 많은 댓글
+    ]
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView style={styles.content}>
-        {/* 게시글 헤더 */}
+    <View style={styles.container}>
+      <Stack.Screen
+        options={{
+          title: '게시물',
+          headerShown: true,
+          headerLeft: () => (
+            <TouchableOpacity 
+              onPress={() => router.push('/(tabs)/community')}
+              style={{ marginLeft: 10 }}
+            >
+              <Ionicons name="arrow-back" size={24} color="black" />
+            </TouchableOpacity>
+          ),
+        }}
+      />
+      
+      <ScrollView>
+        {/* 게시물 헤더 */}
         <View style={styles.header}>
-          <View style={styles.authorInfo}>
-            <Text style={styles.author}>{post.author}</Text>
-            <Text style={styles.date}>{post.date}</Text>
-          </View>
+          <Image source={{ uri: post.user.avatar }} style={styles.avatar} />
+          <Text style={styles.username}>{post.user.name}</Text>
+        </View>
+
+        {/* 게시물 이미지 */}
+        <Image source={{ uri: post.image }} style={styles.postImage} />
+
+        {/* 게시물 액션 버튼 */}
+        <View style={styles.actions}>
+          <TouchableOpacity onPress={() => setIsLiked(!isLiked)}>
+            <Ionicons 
+              name={isLiked ? "heart" : "heart-outline"} 
+              size={28} 
+              color={isLiked ? "red" : "black"} 
+            />
+          </TouchableOpacity>
           <TouchableOpacity>
-            <Ionicons name="ellipsis-horizontal" size={24} color="#666" />
+            <Ionicons name="chatbubble-outline" size={28} color="black" />
+          </TouchableOpacity>
+          <TouchableOpacity>
+            <Ionicons name="paper-plane-outline" size={28} color="black" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.bookmark}>
+            <Ionicons name="bookmark-outline" size={28} color="black" />
           </TouchableOpacity>
         </View>
 
-        {/* 게시글 내용 */}
-        <View style={styles.postContent}>
-          <Text style={styles.title}>{post.title}</Text>
-          <Text style={styles.postContentText}>{post.content}</Text>
+        {/* 좋아요 수 */}
+        <Text style={styles.likes}>{post.likes}명이 좋아합니다</Text>
+
+        {/* 게시물 설명 */}
+        <View style={styles.description}>
+          <Text style={styles.username}>{post.user.name}</Text>
+          <Text style={styles.text}>{post.description}</Text>
         </View>
 
-        {/* 게시글 통계 */}
-        <View style={styles.stats}>
-          <View style={styles.statItem}>
-            <Ionicons name="heart-outline" size={20} color="#FF9500" />
-            <Text style={styles.statText}>{post.likes}</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Ionicons name="chatbubble-outline" size={20} color="#FF9500" />
-            <Text style={styles.statText}>{post.comments.length}</Text>
-          </View>
-        </View>
-
-        {/* 댓글 목록 */}
-        <View style={styles.commentsSection}>
-          <Text style={styles.sectionTitle}>댓글</Text>
-          {post.comments.map((comment) => (
-            <View key={comment.id} style={styles.commentItem}>
-              <View style={styles.commentHeader}>
-                <Text style={styles.commentAuthor}>{comment.author}</Text>
-                <Text style={styles.commentDate}>{comment.date}</Text>
-              </View>
-              <Text style={styles.commentContent}>{comment.content}</Text>
-              <View style={styles.commentFooter}>
-                <TouchableOpacity style={styles.commentAction}>
-                  <Ionicons name="heart-outline" size={16} color="#666" />
-                  <Text style={styles.commentActionText}>{comment.likes}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.commentAction}>
-                  <Ionicons name="chatbubble-outline" size={16} color="#666" />
-                  <Text style={styles.commentActionText}>답글</Text>
-                </TouchableOpacity>
+        {/* 댓글 */}
+        <View style={styles.comments}>
+          {post.commentList.map(comment => (
+            <View key={comment.id} style={styles.comment}>
+              <Image source={{ uri: comment.user.avatar }} style={styles.commentAvatar} />
+              <View style={styles.commentContent}>
+                <Text style={styles.commentUsername}>{comment.user.name}</Text>
+                <Text style={styles.commentText}>{comment.text}</Text>
+                <Text style={styles.commentTime}>{comment.createdAt}</Text>
               </View>
             </View>
           ))}
@@ -118,21 +136,18 @@ export default function CommunityDetailScreen() {
 
       {/* 댓글 입력 */}
       <View style={styles.commentInput}>
+        <Image source={{ uri: post.user.avatar }} style={styles.inputAvatar} />
         <TextInput
           style={styles.input}
-          placeholder="댓글을 입력하세요"
+          placeholder="댓글 달기..."
           value={comment}
           onChangeText={setComment}
-          multiline
         />
-        <TouchableOpacity
-          style={styles.submitButton}
-          onPress={handleCommentSubmit}
-        >
-          <Text style={styles.submitButtonText}>전송</Text>
+        <TouchableOpacity>
+          <Text style={styles.postButton}>게시</Text>
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -142,126 +157,91 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
-  content: {
-    flex: 1,
-  },
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    padding: 10,
   },
-  authorInfo: {
-    flex: 1,
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
   },
-  author: {
+  username: {
+    fontWeight: "bold",
     fontSize: 16,
+  },
+  postImage: {
+    width: "100%",
+    aspectRatio: 1,
+  },
+  actions: {
+    flexDirection: "row",
+    padding: 10,
+  },
+  bookmark: {
+    marginLeft: "auto",
+  },
+  likes: {
     fontWeight: "bold",
-    marginBottom: 5,
+    paddingHorizontal: 10,
+    paddingBottom: 5,
   },
-  date: {
-    fontSize: 14,
-    color: "#666",
+  description: {
+    flexDirection: "row",
+    padding: 10,
   },
-  postContent: {
-    padding: 15,
+  text: {
+    marginLeft: 5,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
+  comments: {
+    padding: 10,
+  },
+  comment: {
+    flexDirection: "row",
     marginBottom: 10,
   },
-  postContentText: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: "#333",
-  },
-  stats: {
-    flexDirection: "row",
-    padding: 15,
-    borderTopWidth: 1,
-    borderTopColor: "#eee",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  statItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 20,
-  },
-  statText: {
-    marginLeft: 5,
-    fontSize: 14,
-    color: "#666",
-  },
-  commentsSection: {
-    padding: 15,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 15,
-  },
-  commentItem: {
-    marginBottom: 15,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  commentHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 5,
-  },
-  commentAuthor: {
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  commentDate: {
-    fontSize: 12,
-    color: "#666",
+  commentAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginRight: 10,
   },
   commentContent: {
-    fontSize: 14,
-    marginBottom: 10,
+    flex: 1,
   },
-  commentFooter: {
-    flexDirection: "row",
+  commentUsername: {
+    fontWeight: "bold",
   },
-  commentAction: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 15,
+  commentText: {
+    marginTop: 2,
   },
-  commentActionText: {
-    marginLeft: 5,
+  commentTime: {
     fontSize: 12,
     color: "#666",
+    marginTop: 2,
   },
   commentInput: {
     flexDirection: "row",
+    alignItems: "center",
     padding: 10,
     borderTopWidth: 1,
     borderTopColor: "#eee",
-    backgroundColor: "#fff",
+  },
+  inputAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginRight: 10,
   },
   input: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    marginRight: 10,
-    maxHeight: 100,
+    height: 40,
+    paddingHorizontal: 10,
   },
-  submitButton: {
-    justifyContent: "center",
-    paddingHorizontal: 15,
-  },
-  submitButtonText: {
-    color: "#FF9500",
+  postButton: {
+    color: "#0095f6",
     fontWeight: "bold",
   },
 }); 

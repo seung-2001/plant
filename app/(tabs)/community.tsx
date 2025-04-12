@@ -4,10 +4,13 @@
 // - 게시글 목록 표시
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, TextInput, SectionList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, TextInput, SectionList, FlatList, Dimensions } from 'react-native';
 import { FontAwesome, Ionicons } from '@expo/vector-icons';
-import { router } from "expo-router";
+import { router, Link, useRouter } from "expo-router";
 import { useAuth } from '../../context/auth';
+
+const { width } = Dimensions.get('window');
+const POST_WIDTH = (width - 2) / 3;
 
 // 임시 게시물 데이터
 const DUMMY_POSTS = [
@@ -15,10 +18,10 @@ const DUMMY_POSTS = [
     id: '1',
     user: {
       name: '김봉사',
-      avatar: 'https://via.placeholder.com/50',
+      avatar: 'https://picsum.photos/200',
     },
     content: '오늘 첫 봉사활동 다녀왔어요! 보람찼습니다 😊',
-    image: 'https://via.placeholder.com/300',
+    image: 'https://picsum.photos/400',
     likes: 24,
     comments: 5,
     createdAt: '10분 전',
@@ -27,7 +30,7 @@ const DUMMY_POSTS = [
     id: '2',
     user: {
       name: '이나눔',
-      avatar: 'https://via.placeholder.com/50',
+      avatar: 'https://picsum.photos/201',
     },
     content: '주말 봉사 모임 함께하실 분 구해요~\n이번 주 토요일 오전 10시, 시청 앞 집결입니다!',
     likes: 15,
@@ -81,6 +84,8 @@ export default function CommunityScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'stories' | 'posts'>('stories');
   const { user } = useAuth();
+  const [posts, setPosts] = useState(DUMMY_POSTS);
+  const router = useRouter();
 
   const notices = [
     {
@@ -106,7 +111,7 @@ export default function CommunityScreen() {
       date: '2024-03-19',
       likes: 12,
       comments: 3,
-      image: 'https://via.placeholder.com/300x200',
+      image: 'https://picsum.photos/402',
     },
     {
       id: 2,
@@ -116,7 +121,7 @@ export default function CommunityScreen() {
       date: '2024-03-18',
       likes: 8,
       comments: 2,
-      image: 'https://via.placeholder.com/300x200',
+      image: 'https://picsum.photos/403',
     },
   ];
 
@@ -185,40 +190,30 @@ export default function CommunityScreen() {
     const items = data.items as Post[];
     return (
       <View style={styles.section}>
-        {items.map((item) => (
-          <View key={item.id} style={styles.storyItem}>
-            {/* 게시물 헤더 */}
-            <View style={styles.postHeader}>
-              <View style={styles.userInfo}>
-                <Image source={{ uri: item.user.avatar }} style={styles.avatar} />
-                <Text style={styles.userName}>{item.user.name}</Text>
+        {items.map((post) => (
+          <TouchableOpacity
+            key={post.id}
+            style={styles.storyItem}
+            onPress={() => router.push(`/community/${post.id}`)}
+          >
+            <Image source={{ uri: post.image }} style={styles.storyImage} />
+            <View style={styles.storyContent}>
+              <View style={styles.storyHeader}>
+                <Image source={{ uri: post.user.avatar }} style={styles.storyAvatar} />
+                <Text style={styles.storyUsername}>{post.user.name}</Text>
               </View>
-              <TouchableOpacity>
-                <Text style={styles.moreButton}>⋮</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* 게시물 내용 */}
-            <Text style={styles.postContent}>{item.content}</Text>
-
-            {/* 게시물 이미지 */}
-            {item.image && (
-              <Image source={{ uri: item.image }} style={styles.postImage} />
-            )}
-
-            {/* 게시물 하단 */}
-            <View style={styles.postFooter}>
-              <View style={styles.actions}>
-                <TouchableOpacity style={styles.actionButton}>
-                  <Text>❤️ {item.likes}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton}>
-                  <Text>💬 {item.comments}</Text>
-                </TouchableOpacity>
+              <Text style={styles.storyPreview}>{post.content}</Text>
+              <View style={styles.storyFooter}>
+                <Text style={styles.storyDate}>{post.createdAt}</Text>
+                <View style={styles.storyStats}>
+                  <FontAwesome name="heart" size={14} color="#FF6B00" />
+                  <Text style={styles.storyStatText}>{post.likes}</Text>
+                  <FontAwesome name="comment" size={14} color="#666" style={styles.commentIcon} />
+                  <Text style={styles.storyStatText}>{post.comments}</Text>
+                </View>
               </View>
-              <Text style={styles.timestamp}>{item.createdAt}</Text>
             </View>
-          </View>
+          </TouchableOpacity>
         ))}
       </View>
     );
@@ -314,7 +309,7 @@ export default function CommunityScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
@@ -322,12 +317,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#ddd',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#FF9500',
+    color: '#000',
   },
   writeButton: {
     backgroundColor: '#FF9500',
@@ -402,16 +397,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 8,
     overflow: 'hidden',
-    padding: 15,
     borderWidth: 1,
     borderColor: '#eee',
   },
   storyImage: {
     width: '100%',
     height: 200,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
   },
   storyContent: {
     padding: 15,
+  },
+  storyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  storyAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginRight: 10,
+  },
+  storyUsername: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   storyTitle: {
     fontSize: 18,
@@ -522,7 +533,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingHorizontal: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#ddd',
   },
   tab: {
     flex: 1,
@@ -531,14 +542,30 @@ const styles = StyleSheet.create({
   },
   activeTab: {
     borderBottomWidth: 2,
-    borderBottomColor: '#FF9500',
+    borderBottomColor: '#000',
   },
   tabText: {
     fontSize: 16,
     color: '#666',
   },
   activeTabText: {
-    color: '#FF9500',
+    color: '#000',
     fontWeight: 'bold',
+  },
+  postOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'flex-end',
+    padding: 8,
+  },
+  postStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statText: {
+    color: 'white',
+    marginLeft: 4,
+    marginRight: 12,
+    fontWeight: '600',
   },
 }); 

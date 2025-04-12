@@ -26,27 +26,27 @@ export default function SignUpScreen() {
 
   const { signUp } = useAuth();
 
-  // 회원가입 처리 함수
   const handleSignUp = async () => {
-    // 입력값 검증
     if (!email || !password || !name) {
-      Alert.alert("회원가입 실패", "모든 필드를 입력해주세요.");
+      Alert.alert('오류', '모든 필드를 입력해주세요.');
       return;
     }
 
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      console.log('회원가입 시도:', { email, name }); // 비밀번호는 로그에 남기지 않습니다
       await signUp(email, password, name);
-      console.log('회원가입 성공');
-      Alert.alert("회원가입 성공", "환영합니다!");
-      router.replace("/(auth)/login");
-    } catch (error) {
-      console.error('회원가입 실패:', error);
       Alert.alert(
-        "회원가입 실패", 
-        error instanceof Error ? error.message : "회원가입 중 오류가 발생했습니다."
+        '회원가입 성공',
+        '회원가입이 완료되었습니다. 로그인해주세요.',
+        [
+          {
+            text: '확인',
+            onPress: () => router.push('/login')
+          }
+        ]
       );
+    } catch (error: any) {
+      Alert.alert('회원가입 실패', error.message);
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +91,7 @@ export default function SignUpScreen() {
         />
 
         {/* 회원가입 버튼 */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.button, isLoading && styles.buttonDisabled]} 
           onPress={handleSignUp}
           disabled={isLoading}
@@ -118,49 +118,49 @@ export default function SignUpScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
+    justifyContent: 'center',
     padding: 20,
-    backgroundColor: "#fff",
+    backgroundColor: '#fff',
   },
   logo: {
     fontSize: 48,
-    fontWeight: "bold",
-    color: "#FF9500",
-    textAlign: "center",
+    fontWeight: 'bold',
+    color: '#FF9500',
+    textAlign: 'center',
     marginBottom: 40,
   },
   form: {
-    width: "100%",
+    width: '100%',
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: '#ddd',
     padding: 15,
     borderRadius: 8,
     marginBottom: 15,
     fontSize: 16,
   },
   button: {
-    backgroundColor: "#FF9500",
+    backgroundColor: '#FF9500',
     padding: 15,
     borderRadius: 8,
-    alignItems: "center",
+    alignItems: 'center',
     marginBottom: 15,
   },
   buttonDisabled: {
-    backgroundColor: "#FFB74D",
+    backgroundColor: '#FFB74D',
   },
   buttonText: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
   linkText: {
-    color: "#FF9500",
-    textAlign: "center",
+    color: '#FF9500',
+    textAlign: 'center',
     fontSize: 16,
   },
   linkTextDisabled: {
-    color: "#FFB74D",
+    color: '#FFB74D',
   },
 }); 

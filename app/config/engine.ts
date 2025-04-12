@@ -1,4 +1,5 @@
 import { API_URL, apiRequest } from './api';
+import queryString from 'query-string';
 
 // 타입 정의
 export interface User {
@@ -43,25 +44,25 @@ export interface Volunteer {
 }
 
 // API 엔진
-export const engine = {
+const engine = {
   // 사용자 관련
   auth: {
     signUp: async (email: string, password: string, name: string) => {
-      return apiRequest('/users/register', {
+      return apiRequest('/add_user', {
         method: 'POST',
-        body: JSON.stringify({ email, password, name }),
+        body: JSON.stringify({ email, password }),
       });
     },
 
     signIn: async (email: string, password: string) => {
-      return apiRequest('/users/login', {
+      return apiRequest('/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
     },
 
     getProfile: async () => {
-      return apiRequest('/users/profile', {
+      return apiRequest('/get_users', {
         method: 'GET',
       });
     },
@@ -131,12 +132,12 @@ export const engine = {
   // 봉사활동 관련
   volunteers: {
     getVolunteers: async (page = 1, limit = 10, status?: string) => {
-      const query = new URLSearchParams({
+      const params = {
         page: page.toString(),
         limit: limit.toString(),
         ...(status && { status }),
-      });
-      return apiRequest(`/volunteers?${query}`, {
+      };
+      return apiRequest(`/volunteers?${queryString.stringify(params)}`, {
         method: 'GET',
       });
     },
@@ -200,4 +201,6 @@ export const engine = {
       });
     },
   },
-}; 
+};
+
+export default engine; 
