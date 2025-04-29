@@ -9,8 +9,7 @@ import { FontAwesome, Ionicons } from '@expo/vector-icons';
 import { router, Link, useRouter } from "expo-router";
 import { useAuth } from '../../context/auth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getPosts, setAuthToken } from '../services/api';
-import { Post } from '../services/api';
+import { getPosts, setAuthToken, Post } from '../services/api';
 
 const { width } = Dimensions.get('window');
 const POST_WIDTH = (width - 4) / 3;
@@ -196,21 +195,14 @@ export default function CommunityScreen() {
             style={styles.storyItem}
             onPress={() => router.push(`/community/${post.id}`)}
           >
-            <Image source={{ uri: post.images[0] || 'https://via.placeholder.com/300' }} style={styles.storyImage} />
             <View style={styles.storyContent}>
-              <View style={styles.storyHeader}>
-                <Image source={{ uri: post.avatar || 'https://via.placeholder.com/50' }} style={styles.storyAvatar} />
-                <Text style={styles.storyUsername}>{post.user_name}</Text>
-              </View>
-              <Text style={styles.storyPreview}>{post.content}</Text>
+              <Text style={styles.storyTitle}>{post.title}</Text>
+              <Text style={styles.storyPreview} numberOfLines={2}>
+                {post.content}
+              </Text>
               <View style={styles.storyFooter}>
+                <Text style={styles.storyAuthor}>{post.author_email}</Text>
                 <Text style={styles.storyDate}>{post.created_at}</Text>
-                <View style={styles.storyStats}>
-                  <FontAwesome name="heart" size={14} color="#FF6B00" />
-                  <Text style={styles.storyStatText}>{post.like_count}</Text>
-                  <FontAwesome name="comment" size={14} color="#666" style={styles.commentIcon} />
-                  <Text style={styles.storyStatText}>{post.comment_count}</Text>
-                </View>
               </View>
             </View>
           </TouchableOpacity>

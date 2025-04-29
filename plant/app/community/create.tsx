@@ -13,10 +13,16 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { createPost } from '@/services/communityService';
+import { useUser } from '@/contexts/UserContext';
+import { Post } from '@/types';
 
 export default function CreatePostScreen() {
   const router = useRouter();
   const inset = useSafeAreaInsets();
+  const { user } = useUser();
+  
+  const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [images, setImages] = useState<string[]>([]);
   const [hashtags, setHashtags] = useState<string[]>([]);
@@ -46,20 +52,23 @@ export default function CreatePostScreen() {
     setHashtags(newHashtags);
   };
 
-  const handleSubmit = () => {
-    if (!content.trim()) {
-      Alert.alert('알림', '내용을 입력해주세요.');
+  const handleSubmit = async () => {
+    if (!title.trim() || !content.trim()) {
+      Alert.alert('오류', '제목과 내용을 모두 입력해주세요.');
       return;
     }
 
-    // TODO: 게시물 저장 API 호출
-    console.log({
-      content,
-      images,
-      hashtags,
-    });
-
-    router.back();
+    try {
+      await createPost({
+        title,
+        content,
+        author_email: user?.email || ''
+      });
+      router.back();
+    } catch (error) {
+      console.error('게시글 작성 실패:', error);
+      Alert.alert('오류', '게시글 작성 중 오류가 발생했습니다.');
+    }
   };
 
   return (
@@ -68,19 +77,25 @@ export default function CreatePostScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="close" size={24} color="#000" />
         </TouchableOpacity>
-        <Text style={styles.title}>새 게시물</Text>
+        <Text style={styles.title}>새 게시글 작성</Text>
         <TouchableOpacity onPress={handleSubmit}>
-          <Text style={styles.submitButton}>게시</Text>
+          <Text style={styles.submitButton}>작성</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content}>
         <TextInput
+          style={styles.titleInput}
+          placeholder="제목"
+          value={title}
+          onChangeText={setTitle}
+        />
+        <TextInput
           style={styles.contentInput}
-          placeholder="무슨 생각을 하고 계신가요?"
-          multiline
+          placeholder="내용을 입력하세요"
           value={content}
           onChangeText={setContent}
+          multiline
         />
 
         <View style={styles.imageContainer}>
@@ -131,8 +146,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
@@ -141,17 +156,25 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   submitButton: {
-    color: '#FF6B00',
+    color: '#007AFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
   content: {
     flex: 1,
+    padding: 16,
+  },
+  titleInput: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    padding: 0,
   },
   contentInput: {
-    padding: 20,
     fontSize: 16,
+    lineHeight: 24,
     minHeight: 200,
+    padding: 0,
   },
   imageContainer: {
     flexDirection: 'row',

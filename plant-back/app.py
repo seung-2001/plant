@@ -18,9 +18,10 @@ CORS(app, resources={
     r"/*": {
         "origins": "*",
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "Accept"],
+        "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
         "expose_headers": ["Content-Type", "Authorization", "Accept"],
-        "supports_credentials": True
+        "supports_credentials": True,
+        "max_age": 3600
     }
 })
 
@@ -51,10 +52,10 @@ db = Database("local")
 
 @app.before_request
 def log_request_data():
-    data = request.get_json()
+    data = request.get_json(silent=True)
     print(f"Request URL: {request.url}")
     print(f"Request Method: {request.method}")
-    print(f"Request Headers: {request.headers}")
+    print(f"Request Headers: {dict(request.headers)}")
     print(f"Request Data: {data}")
     print(f"Request Remote Address: {request.remote_addr}")
     print(f"Request User Agent: {request.user_agent}")
@@ -186,16 +187,21 @@ def get_user_by_email(email):
   
 
 
-# 프로필 조회(4/11에 추가함)
+# 프로필 조회
 @app.route('/user/profile', methods=['GET'])
+@app.route('/user', methods=['GET'])
 @jwt_required()
 def get_profile():
-    user_email = get_jwt_identity()  # JWT로부터 사용자 이메일 추출
-    user = db.get_user(user_email)   # DB에서 사용자 정보 조회
-    if user:
-        return jsonify(user), 200
-    else:
-        return jsonify({"error": "사용자 정보를 찾을 수 없습니다."}), 404
+    try:
+        user_email = get_jwt_identity()
+        user = db.get_user(user_email)
+        if user:        
+            return jsonify(user), 200
+        else:
+            return jsonify({"error": "사용자 정보를 찾을 수 없습니다."}), 404
+    except Exception as e:
+        print(f"프로필 조회 중 오류 발생: {e}")
+        return jsonify({"error": "프로필 조회 중 오류가 발생했습니다."}), 500
     
 # 비밀번호 수정
 @app.route('/user/password', methods=['PUT'])
@@ -280,98 +286,183 @@ def get_volunteer_info_json(program_id):
 @app.route('/posts', methods=['POST'])
 @jwt_required()
 def create_post():
-    data = request.get_json()
-    title = data['title']
-    content = data['content']
-    author_email = get_jwt_identity()  # JWT로부터 사용자 이메일 추출
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "요청 데이터가 없습니다."}), 400
+            
+        title = data.get('title')
+        content = data.get('content')
+        author_email = get_jwt_identity()
 
-    db.insert_post(title, content, author_email)
-    return jsonify({"message": "게시글이 등록되었습니다."}), 201
+        if not title or not content:
+            return jsonify({"error": "제목과 내용을 모두 입력해주세요."}), 400
+
+        result = db.insert_post(title, content, author_email)
+        if result:
+            return jsonify({"message": "게시글이 등록되었습니다."}), 201
+        else:
+            return jsonify({"error": "게시글 등록에 실패했습니다."}), 500
+    except Exception as e:
+        print(f"게시글 작성 중 오류 발생: {e}")
+        return jsonify({"error": "게시글 작성 중 오류가 발생했습니다."}), 500
 
 # 글 목록 조회
 @app.route('/posts', methods=['GET'])
 def get_posts():
-    posts = db.get_all_posts()
-    return jsonify(posts)
+    try:
+        posts = db.get_all_posts()
+        return jsonify(posts), 200
+    except Exception as e:
+        print(f"게시글 목록 조회 중 오류 발생: {e}")
+        return jsonify({"error": "게시글 목록을 불러오는 중 오류가 발생했습니다."}), 500
 
 # 글 상세
 @app.route('/posts/<int:post_id>', methods=['GET'])
 def get_post(post_id):
-    post = db.get_post(post_id)
-    comments = db.get_comments(post_id)
-    if post:
+    try:
+        post = db.get_post(post_id)
+        if not post:
+            return jsonify({"error": "글을 찾을 수 없습니다."}), 404
+            
+        comments = db.get_comments(post_id)
         return jsonify({
             "post": post,
             "comments": comments
-        })
-    else:
-        return jsonify({"error": "글을 찾을 수 없습니다."}), 404
+        }), 200
+    except Exception as e:
+        print(f"게시글 상세 조회 중 오류 발생: {e}")
+        return jsonify({"error": "게시글을 불러오는 중 오류가 발생했습니다."}), 500
 
 # 댓글 작성 (JWT 로그인 필요)
 @app.route('/posts/<int:post_id>/comment', methods=['POST'])
 @jwt_required()
 def add_comment(post_id):
-    data = request.get_json()
-    content = data.get('content')
-    author_email = get_jwt_identity()
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "요청 데이터가 없습니다."}), 400
+            
+        content = data.get('content')
+        author_email = get_jwt_identity()
 
-    if not content:
-        return jsonify({"error": "댓글 내용을 입력해주세요."}), 400
+        if not content:
+            return jsonify({"error": "댓글 내용을 입력해주세요."}), 400
 
-    db.insert_comment(post_id, content, author_email)
-    return jsonify({"message": "댓글이 등록되었습니다."}), 201
+        result = db.insert_comment(post_id, content, author_email)
+        if result:
+            return jsonify({"message": "댓글이 등록되었습니다."}), 201
+        else:
+            return jsonify({"error": "댓글 등록에 실패했습니다."}), 500
+    except Exception as e:
+        print(f"댓글 작성 중 오류 발생: {e}")
+        return jsonify({"error": "댓글 작성 중 오류가 발생했습니다."}), 500
 
 # 글 수정 (JWT 로그인 필요)
 @app.route('/posts/<int:post_id>', methods=['PUT'])
 @jwt_required()
 def update_post(post_id):
-    data = request.get_json()
-    title = data.get('title')
-    content = data.get('content')
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "요청 데이터가 없습니다."}), 400
+            
+        title = data.get('title')
+        content = data.get('content')
+        author_email = get_jwt_identity()
+        
+        # 글 작성자 확인
+        post = db.get_post(post_id)
+        if not post:
+            return jsonify({"error": "글을 찾을 수 없습니다."}), 404
+        if post['author_email'] != author_email:
+            return jsonify({"error": "글 수정 권한이 없습니다."}), 403
     
-    # 글 수정
-    result = db.update_post(post_id, title, content)
-    if result:
-        return jsonify({"message": "게시글이 수정되었습니다."}), 200
-    else:
-        return jsonify({"error": "게시글 수정에 실패했습니다."}), 400
+        result = db.update_post(post_id, title, content)
+        if result:
+            return jsonify({"message": "게시글이 수정되었습니다."}), 200
+        else:
+            return jsonify({"error": "게시글 수정에 실패했습니다."}), 500
+    except Exception as e:
+        print(f"게시글 수정 중 오류 발생: {e}")
+        return jsonify({"error": "게시글 수정 중 오류가 발생했습니다."}), 500
 
 # 글 삭제 (JWT 로그인 필요)
 @app.route('/posts/<int:post_id>', methods=['DELETE'])
 @jwt_required()
 def delete_post(post_id):
-    result = db.delete_post(post_id)
-    if result:
-        return jsonify({"message": "게시글이 삭제되었습니다."}), 200
-    else:
-        return jsonify({"error": "게시글 삭제에 실패했습니다."}), 400
+    try:
+        author_email = get_jwt_identity()
+        
+        # 글 작성자 확인
+        post = db.get_post(post_id)
+        if not post:
+            return jsonify({"error": "글을 찾을 수 없습니다."}), 404
+        if post['author_email'] != author_email:
+            return jsonify({"error": "글 삭제 권한이 없습니다."}), 403
+            
+        result = db.delete_post(post_id)
+        if result:
+            return jsonify({"message": "게시글이 삭제되었습니다."}), 200
+        else:
+            return jsonify({"error": "게시글 삭제에 실패했습니다."}), 500
+    except Exception as e:
+        print(f"게시글 삭제 중 오류 발생: {e}")
+        return jsonify({"error": "게시글 삭제 중 오류가 발생했습니다."}), 500
     
 # 댓글 수정 (JWT 로그인 필요)
 @app.route('/posts/<int:post_id>/comment/<int:comment_id>', methods=['PUT'])
 @jwt_required()
 def update_comment(post_id, comment_id):
-    data = request.get_json()
-    content = data.get('content')
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "요청 데이터가 없습니다."}), 400
+            
+        content = data.get('content')
+        author_email = get_jwt_identity()
 
-    if not content:
-        return jsonify({"error": "댓글 내용을 입력해주세요."}), 400
+        if not content:
+            return jsonify({"error": "댓글 내용을 입력해주세요."}), 400
+            
+        # 댓글 작성자 확인
+        comment = db.get_comment(comment_id)
+        if not comment:
+            return jsonify({"error": "댓글을 찾을 수 없습니다."}), 404
+        if comment['author_email'] != author_email:
+            return jsonify({"error": "댓글 수정 권한이 없습니다."}), 403
 
-    # 댓글 수정
-    result = db.update_comment(comment_id, content)
-    if result:
-        return jsonify({"message": "댓글이 수정되었습니다."}), 200
-    else:
-        return jsonify({"error": "댓글 수정에 실패했습니다."}), 400
+        result = db.update_comment(comment_id, content)
+        if result:
+            return jsonify({"message": "댓글이 수정되었습니다."}), 200
+        else:
+            return jsonify({"error": "댓글 수정에 실패했습니다."}), 500
+    except Exception as e:
+        print(f"댓글 수정 중 오류 발생: {e}")
+        return jsonify({"error": "댓글 수정 중 오류가 발생했습니다."}), 500
     
 # 댓글 삭제 (JWT 로그인 필요)
 @app.route('/posts/<int:post_id>/comment/<int:comment_id>', methods=['DELETE'])
 @jwt_required()
 def delete_comment(post_id, comment_id):
-    result = db.delete_comment(comment_id)
-    if result:
-        return jsonify({"message": "댓글이 삭제되었습니다."}), 200
-    else:
-        return jsonify({"error": "댓글 삭제에 실패했습니다."}), 400
+    try:
+        author_email = get_jwt_identity()
+        
+        # 댓글 작성자 확인
+        comment = db.get_comment(comment_id)
+        if not comment:
+            return jsonify({"error": "댓글을 찾을 수 없습니다."}), 404
+        if comment['author_email'] != author_email:
+            return jsonify({"error": "댓글 삭제 권한이 없습니다."}), 403
+            
+        result = db.delete_comment(comment_id)
+        if result:
+            return jsonify({"message": "댓글이 삭제되었습니다."}), 200
+        else:
+            return jsonify({"error": "댓글 삭제에 실패했습니다."}), 500
+    except Exception as e:
+        print(f"댓글 삭제 중 오류 발생: {e}")
+        return jsonify({"error": "댓글 삭제 중 오류가 발생했습니다."}), 500
 
 
 if __name__ == '__main__':

@@ -20,7 +20,7 @@ export type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const API_URL = 'http://localhost:5000';
+const API_URL = 'http://192.168.202.59:5000';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await login(email, password);
       
       const userData: UserData = {
-        id: response.user?.id || 0,
+        id: Number(response.user?.id) || 0,
         email: email,
         name: email.split('@')[0],
         created_at: new Date().toISOString()
@@ -85,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signOut,
         isLoading
-      } as AuthContextType}
+      }}
     >
       {children}
     </AuthContext.Provider>

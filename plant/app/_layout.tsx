@@ -4,11 +4,14 @@
 
 import { Slot } from "expo-router";
 import { AuthProvider } from "../context/auth";
+import { UserProvider } from './contexts/UserContext';
 
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <Slot />
+      <UserProvider>
+        <Slot />
+      </UserProvider>
     </AuthProvider>
   );
 } 

@@ -23,7 +23,7 @@ interface ApiRequestOptions {
   headers?: Record<string, string>;
 }
 
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.200.143:5000';
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.202.59:5000';
 export const API_BASE_URL = API_URL;
 
 export const API_ENDPOINTS = {
@@ -56,11 +56,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json'
   },
-  timeout: 10000,
-  withCredentials: true,
-  validateStatus: function (status) {
-    return status >= 200 && status < 500;
-  }
+  timeout: 10000
 });
 
 // 요청 인터셉터
@@ -69,16 +65,14 @@ api.interceptors.request.use(
     console.log('Request:', config.method?.toUpperCase(), config.url);
     console.log('Request data:', config.data);
     const token = await AsyncStorage.getItem('token');
+    console.log('Token:', token);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    // Content-Type이 설정되지 않은 경우 기본값 설정
-    if (!config.headers['Content-Type']) {
-      config.headers['Content-Type'] = 'application/json';
-    }
-    if (!config.headers['Accept']) {
-      config.headers['Accept'] = 'application/json';
-    }
+    // 모든 요청에 대해 Content-Type과 Accept 헤더 설정
+    config.headers['Content-Type'] = 'application/json';
+    config.headers['Accept'] = 'application/json';
+    console.log('Request headers:', config.headers);
     return config;
   },
   (error) => {
@@ -113,6 +107,11 @@ export const apiRequest = async <T>(url: string, options: ApiRequestOptions = {}
     const axiosResponse = await api({
       url,
       ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...options.headers
+      }
     });
     
     console.log('API 응답 성공:', {
@@ -149,6 +148,7 @@ export const login = async (email: string, password: string) => {
       return {
         access_token: loginResponse.data.access_token,
         user: {
+          id: loginResponse.data.user_id || 0,
           email: email
         }
       };
@@ -170,7 +170,9 @@ export const register = async (email: string, password: string, name?: string) =
     
     if (registerResponse.data?.message === "회원가입이 완료되었습니다.") {
       return {
-        email: email
+        id: 0,
+        email: email,
+        name: name || email.split('@')[0]
       };
     }
     
@@ -183,8 +185,12 @@ export const register = async (email: string, password: string, name?: string) =
 
 export const getCurrentUser = async () => {
   try {
-    const userResponse = await apiRequest<User>('/user', {
-      method: 'GET'
+    const userResponse = await apiRequest<User>('/user/profile', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
     });
     return userResponse.data;
   } catch (error: any) {
@@ -198,70 +204,156 @@ export const setAuthToken = (token: string) => {
 };
 
 export const createPost = async (post: Omit<Post, 'id' | 'created_at'>) => {
-  const postResponse = await apiRequest<Post>('/posts', {
-    method: 'POST',
-    data: post
-  });
-  return postResponse.data;
+  try {
+    const response = await apiRequest<Post>('/posts', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      data: {
+        title: post.title,
+        content: post.content
+      }
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error('게시물 생성 실패:', error);
+    throw error;
+  }
 };
 
 export const getPosts = async () => {
-  const postsResponse = await apiRequest<Post[]>('/posts', {
-    method: 'GET'
-  });
-  return postsResponse.data || [];
+  try {
+    const postsResponse = await apiRequest<Post[]>('/posts', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    return postsResponse.data || [];
+  } catch (error: any) {
+    console.error('게시물 목록 조회 실패:', error);
+    throw error;
+  }
 };
 
 export const getPost = async (id: number) => {
-  const postResponse = await apiRequest<Post>(`/posts/${id}`, {
-    method: 'GET'
-  });
-  return postResponse.data;
+  try {
+    const postResponse = await apiRequest<Post>(`/posts/${id}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    return postResponse.data;
+  } catch (error: any) {
+    console.error('게시물 조회 실패:', error);
+    throw error;
+  }
 };
 
 export const updatePost = async (id: number, post: Partial<Post>) => {
-  const updateResponse = await apiRequest<Post>(`/posts/${id}`, {
-    method: 'PUT',
-    data: post
-  });
-  return updateResponse.data;
+  try {
+    const response = await apiRequest<Post>(`/posts/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      data: post
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error('게시물 수정 실패:', error);
+    throw error;
+  }
 };
 
 export const deletePost = async (id: number) => {
-  const deleteResponse = await apiRequest<void>(`/posts/${id}`, {
-    method: 'DELETE'
-  });
-  return deleteResponse.data;
+  try {
+    const response = await apiRequest<void>(`/posts/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error('게시물 삭제 실패:', error);
+    throw error;
+  }
 };
 
 export const getComments = async (postId: number) => {
-  const commentsResponse = await apiRequest<Comment[]>(`/posts/${postId}/comments`, {
-    method: 'GET'
-  });
-  return commentsResponse.data || [];
+  try {
+    const response = await apiRequest<Comment[]>(`/posts/${postId}/comment`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    return response.data || [];
+  } catch (error: any) {
+    console.error('댓글 목록 조회 실패:', error);
+    throw error;
+  }
 };
 
 export const createComment = async (postId: number, content: string) => {
-  const commentResponse = await apiRequest<Comment>(`/posts/${postId}/comment`, {
-    method: 'POST',
-    data: { content }
-  });
-  return commentResponse.data;
+  try {
+    const response = await apiRequest<Comment>(`/posts/${postId}/comment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      data: {
+        content: content
+      }
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error('댓글 작성 실패:', error);
+    throw error;
+  }
 };
 
 export const updateComment = async (postId: number, commentId: number, content: string) => {
-  const updateResponse = await apiRequest<Comment>(`/posts/${postId}/comment/${commentId}`, {
-    method: 'PUT',
-    data: { content }
-  });
-  return updateResponse.data;
+  try {
+    const response = await apiRequest<Comment>(`/posts/${postId}/comment/${commentId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      data: { content }
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error('댓글 수정 실패:', error);
+    throw error;
+  }
 };
 
 export const deleteComment = async (postId: number, commentId: number) => {
-  const deleteResponse = await apiRequest<void>(`/posts/${postId}/comment/${commentId}`, {
-    method: 'DELETE'
-  });
-  return deleteResponse.data;
+  try {
+    const response = await apiRequest<void>(`/posts/${postId}/comment/${commentId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error('댓글 삭제 실패:', error);
+    throw error;
+  }
 };
 
 export const createVolunteer = async (title: string, description: string, date: string, location: string) => {
@@ -294,23 +386,20 @@ export const getMyVolunteers = async () => {
 };
 
 export interface Post {
-  id: string;
-  user_name: string;
+  id: number;
+  title: string;
   content: string;
-  images: string[];
-  like_count: number;
-  comment_count: number;
+  author_email: string;
   created_at: string;
-  avatar?: string;
 }
 
 export interface Comment {
   id: number;
   post_id: number;
-  user_name: string;
+  author_email: string;
   content: string;
   created_at: string;
-  avatar?: string;
+  updated_at?: string;
 }
 
 export interface Volunteer {
