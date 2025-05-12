@@ -10,6 +10,9 @@
         <meta-data
             android:name="com.kakao.sdk.AppKey"
             android:value="501119b67125c75246f057adc1d23d0d"/>
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyDZAfEAzvDgy6AUR0ZosNREDOEq8wSv720"/>
         <activity
             android:name=".MainActivity"
             android:label="@string/app_name"

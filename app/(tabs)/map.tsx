@@ -162,7 +162,7 @@ export default function MapScreen() {
   const filteredPlaces = getNearbyPlaces(
     selectedType === 'all' 
       ? places 
-      : places.filter(place => place.type === selectedType)
+      : places.filter((place: VolunteerPlace) => place.type === selectedType)
   );
 
   const handleMoveToUserLocation = () => {

@@ -1,215 +1,126 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-interface VolunteerPlace {
-  id: string;
-  name: string;
-  address: string;
-  type: 'nursing_home' | 'child_care' | 'disabled_facility' | 'environment';
-  date: string;
-  participants: number;
-  maxParticipants: number;
-}
+import { fetchVolunteerMeals, VolunteerMeal } from '../../services/volunteerService';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function VolunteerScreen() {
   const router = useRouter();
   const inset = useSafeAreaInsets();
-  const [selectedType, setSelectedType] = useState<'all' | VolunteerPlace['type']>('all');
+  const [meals, setMeals] = useState<VolunteerMeal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // TODO: API에서 봉사활동 데이터 가져오기
-  const mockPlaces: VolunteerPlace[] = [
-    {
-      id: '1',
-      name: '행복요양원',
-      address: '서울시 중구 세종대로 110',
-      type: 'nursing_home',
-      date: '2024-03-15',
-      participants: 5,
-      maxParticipants: 10,
-    },
-    {
-      id: '2',
-      name: '사랑어린이집',
-      address: '서울시 중구 세종대로 111',
-      type: 'child_care',
-      date: '2024-03-16',
-      participants: 3,
-      maxParticipants: 8,
-    },
-    {
-      id: '3',
-      name: '희망복지관',
-      address: '서울시 중구 세종대로 112',
-      type: 'disabled_facility',
-      date: '2024-03-17',
-      participants: 7,
-      maxParticipants: 12,
-    },
-    {
-      id: '4',
-      name: '청계천 환경정화',
-      address: '서울시 중구 청계천로',
-      type: 'environment',
-      date: '2024-03-18',
-      participants: 15,
-      maxParticipants: 20,
-    },
-  ];
+  useEffect(() => {
+    loadVolunteers();
+  }, []);
 
-  const getTypeName = (type: VolunteerPlace['type']) => {
-    switch (type) {
-      case 'nursing_home':
-        return '요양원';
-      case 'child_care':
-        return '어린이집';
-      case 'disabled_facility':
-        return '장애인시설';
-      case 'environment':
-        return '환경정화';
-      default:
-        return '';
+  const loadVolunteers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await fetchVolunteerMeals({
+        start_date: '2024-03-01',
+        end_date: '2024-12-31'
+      });
+      
+      if (response.items) {
+        setMeals(response.items);
+      } else {
+        setError('봉사 정보를 불러올 수 없습니다.');
+        Alert.alert('에러', '봉사 정보를 불러올 수 없습니다.');
+      }
+    } catch (error) {
+      console.error('봉사자 목록 로드 실패:', error);
+      setError('봉사 정보를 불러오는 중 오류가 발생했습니다.');
+      Alert.alert('에러', '봉사 정보를 불러오는 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getTypeIcon = (type: VolunteerPlace['type']) => {
-    switch (type) {
-      case 'nursing_home':
-        return 'people';
-      case 'child_care':
-        return 'happy';
-      case 'disabled_facility':
-        return 'accessibility';
-      case 'environment':
-        return 'leaf';
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case '모집중':
+        return '#4CAF50';
+      case '모집완료':
+        return '#FF6B00';
+      case '모집마감':
+        return '#9E9E9E';
       default:
-        return 'help';
+        return '#666666';
     }
   };
 
-  const filteredPlaces = selectedType === 'all' 
-    ? mockPlaces 
-    : mockPlaces.filter(place => place.type === selectedType);
-
-  const renderItem = ({ item }: { item: VolunteerPlace }) => (
-    <TouchableOpacity
+  const renderItem = ({ item }: { item: VolunteerMeal }) => (
+    <TouchableOpacity 
       style={styles.card}
-      onPress={() => router.push({
-        pathname: '/volunteer-detail',
-        params: {
-          id: item.id,
-          name: item.name,
-          address: item.address,
-          date: item.date,
-          participants: item.participants.toString(),
-          maxParticipants: item.maxParticipants.toString(),
-        },
-      })}
+      onPress={() => {
+        // 상세 페이지로 이동
+        router.push({
+          pathname: '/volunteer/[id]',
+          params: { id: item.progrmRegistNo }
+        });
+      }}
     >
       <View style={styles.cardHeader}>
-        <View style={styles.typeContainer}>
-          <Ionicons name={getTypeIcon(item.type)} size={20} color="#4CAF50" />
-          <Text style={styles.typeText}>{getTypeName(item.type)}</Text>
-        </View>
-        <Text style={styles.date}>{item.date}</Text>
+        <Text style={styles.placeName}>{item.prgramSj}</Text>
+        <Text style={[styles.status, { color: getStatusColor(item.progrmSttusSe) }]}>
+          {item.progrmSttusSe}
+        </Text>
       </View>
       
-      <Text style={styles.placeName}>{item.name}</Text>
-      <Text style={styles.address}>{item.address}</Text>
-      
-      <View style={styles.participantsInfo}>
-        <Text style={styles.participantsText}>
-          참가자: {item.participants} / {item.maxParticipants}명
+      <View style={styles.infoRow}>
+        <Ionicons name="calendar-outline" size={16} color="#666" />
+        <Text style={styles.date}>
+          {formatDate(item.actBeginDe)} ~ {formatDate(item.actEndDe)}
         </Text>
-        <View style={styles.progressBar}>
-          <View 
-            style={[
-              styles.progressFill, 
-              { 
-                width: `${(item.participants / item.maxParticipants) * 100}%` 
-              }
-            ]} 
-          />
-        </View>
+      </View>
+
+      <View style={styles.infoRow}>
+        <Ionicons name="time-outline" size={16} color="#666" />
+        <Text style={styles.infoText}>{item.actTime}</Text>
+      </View>
+
+      <View style={styles.infoRow}>
+        <Ionicons name="location-outline" size={16} color="#666" />
+        <Text style={styles.infoText}>{item.actPlace}</Text>
+      </View>
+
+      <View style={styles.infoRow}>
+        <Ionicons name="people-outline" size={16} color="#666" />
+        <Text style={styles.infoText}>모집인원: {item.rcritNmpr}명</Text>
+      </View>
+
+      <View style={styles.infoRow}>
+        <Ionicons name="call-outline" size={16} color="#666" />
+        <Text style={styles.infoText}>{item.telno || '연락처 정보 없음'}</Text>
       </View>
     </TouchableOpacity>
   );
 
+  if (loading) return <ActivityIndicator style={{ marginTop: 40 }} />;
+  if (error) return <Text style={{ color: 'red', margin: 20 }}>{error}</Text>;
+
   return (
-    <View style={[styles.container, { paddingTop: inset.top }]}>
+    <View style={[styles.container, { paddingTop: inset.top }]}> 
       <View style={styles.header}>
         <Text style={styles.title}>봉사 활동</Text>
       </View>
-
-      <View style={styles.filterContainer}>
-        <TouchableOpacity 
-          style={[styles.filterButton, selectedType === 'all' && styles.selectedFilter]}
-          onPress={() => setSelectedType('all')}
-        >
-          <Text style={[styles.filterText, selectedType === 'all' && styles.selectedFilterText]}>
-            전체
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.filterButton, selectedType === 'nursing_home' && styles.selectedFilter]}
-          onPress={() => setSelectedType('nursing_home')}
-        >
-          <Text style={[styles.filterText, selectedType === 'nursing_home' && styles.selectedFilterText]}>
-            요양원
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.filterButton, selectedType === 'child_care' && styles.selectedFilter]}
-          onPress={() => setSelectedType('child_care')}
-        >
-          <Text style={[styles.filterText, selectedType === 'child_care' && styles.selectedFilterText]}>
-            어린이집
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.filterButton, selectedType === 'disabled_facility' && styles.selectedFilter]}
-          onPress={() => setSelectedType('disabled_facility')}
-        >
-          <Text style={[styles.filterText, selectedType === 'disabled_facility' && styles.selectedFilterText]}>
-            장애인시설
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.filterButton, selectedType === 'environment' && styles.selectedFilter]}
-          onPress={() => setSelectedType('environment')}
-        >
-          <Text style={[styles.filterText, selectedType === 'environment' && styles.selectedFilterText]}>
-            환경정화
-          </Text>
-        </TouchableOpacity>
-      </View>
-
       <FlatList
-        data={filteredPlaces}
+        data={meals}
         renderItem={renderItem}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item.progrmRegistNo}
         contentContainerStyle={styles.listContainer}
+        refreshing={loading}
+        onRefresh={loadVolunteers}
       />
-
-      <View style={[styles.navigationBar, { paddingBottom: inset.bottom }]}>
-        <TouchableOpacity 
-          style={styles.navButton}
-          onPress={() => router.push('/map')}
-        >
-          <Ionicons name="map" size={24} color="#666" />
-          <Text style={styles.navText}>지도</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.navButton}
-          onPress={() => router.push('/volunteer')}
-        >
-          <Ionicons name="heart" size={24} color="#4CAF50" />
-          <Text style={[styles.navText, { color: '#4CAF50' }]}>봉사</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
@@ -230,30 +141,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
-  filterContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  filterButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
-    backgroundColor: '#f5f5f5',
-  },
-  selectedFilter: {
-    backgroundColor: '#4CAF50',
-  },
-  filterText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  selectedFilterText: {
-    color: 'white',
-  },
   listContainer: {
     padding: 16,
   },
@@ -272,71 +159,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  typeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  typeText: {
-    marginLeft: 4,
-    fontSize: 14,
-    color: '#4CAF50',
-  },
-  date: {
-    fontSize: 14,
-    color: '#666',
+    marginBottom: 12,
   },
   placeName: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 4,
+    flex: 1,
+    marginRight: 8,
   },
-  address: {
+  status: {
     fontSize: 14,
-    color: '#666',
-    marginBottom: 12,
+    fontWeight: '500',
   },
-  participantsInfo: {
-    marginTop: 12,
-  },
-  participantsText: {
-    fontSize: 14,
-    color: '#666',
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 8,
   },
-  progressBar: {
-    height: 8,
-    backgroundColor: '#eee',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#4CAF50',
-  },
-  navigationBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    height: 80,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-  },
-  navButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  navText: {
-    marginTop: 4,
-    fontSize: 12,
+  date: {
+    fontSize: 14,
     color: '#666',
+    marginLeft: 8,
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 8,
+    flex: 1,
   },
 }); 

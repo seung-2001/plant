@@ -1,141 +1,291 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform } from 'react-native';
-import { FontAwesome } from '@expo/vector-icons';
-import MapView, { Marker } from 'react-native-maps';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { fetchVolunteerMeals, VolunteerMeal } from '../../services/volunteerService';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import Geocoder from 'react-native-geocoding';
+
+// Google Maps API 키 설정
+Geocoder.init("AIzaSyDZAfEAzvDgy6AUR0ZosNREDOEq8wSv720");
 
 export default function VolunteerDetail() {
-  const router = useRouter();
   const { id } = useLocalSearchParams();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const [volunteer, setVolunteer] = useState<VolunteerMeal | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [location, setLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
-  const volunteerData = {
-    id: 1,
-    title: '우리동네 보육원',
-    description: '보육원 아이들과 함께 미술 활동을 진행합니다. 아이들의 창의성을 키우고 즐거운 시간을 보내보세요.',
-    date: '2024-03-25',
-    time: '10:00 - 12:00',
-    location: {
-      latitude: 37.5665,
-      longitude: 126.9780,
-      address: '서울특별시 중구 세종대로 110',
-    },
-    requirements: [
-      '미술 활동 경험자 우대',
-      '아이들과 함께할 수 있는 따뜻한 마음',
-      '기본적인 미술 도구 사용 가능',
-    ],
-    contact: {
-      name: '김원장',
-      phone: '02-1234-5678',
-      email: 'kim@example.com',
-    },
-    status: '모집중',
-    currentVolunteers: 5,
-    maxVolunteers: 10,
-  };
+  useEffect(() => {
+    loadVolunteerDetail();
+  }, [id]);
 
-  const renderMap = () => {
-    if (Platform.OS === 'web') {
-      return (
-        <View style={styles.mapPlaceholder}>
-          <Text>지도는 모바일에서만 사용 가능합니다.</Text>
-        </View>
-      );
+  const loadVolunteerDetail = async () => {
+    try {
+      setLoading(true);
+      const response = await fetchVolunteerMeals({
+        start_date: '2024-03-01',
+        end_date: '2024-12-31'
+      });
+      
+      if (response.items) {
+        const found = response.items.find((item: VolunteerMeal) => item.progrmRegistNo === id);
+        if (found) {
+          setVolunteer(found);
+          // 주소를 좌표로 변환
+          if (found.actPlace) {
+            try {
+              const response = await Geocoder.from(found.actPlace);
+              const { lat, lng } = response.results[0].geometry.location;
+              setLocation({ latitude: lat, longitude: lng });
+            } catch (error) {
+              console.error('주소 변환 실패:', error);
+            }
+          }
+        } else {
+          Alert.alert('오류', '봉사 정보를 찾을 수 없습니다.');
+          router.back();
+        }
+      }
+    } catch (error) {
+      console.error('봉사 상세 정보 로드 실패:', error);
+      Alert.alert('오류', '봉사 정보를 불러오는 중 오류가 발생했습니다.');
+      router.back();
+    } finally {
+      setLoading(false);
     }
-
-    return (
-      <MapView
-        style={styles.map}
-        initialRegion={{
-          latitude: volunteerData.location.latitude,
-          longitude: volunteerData.location.longitude,
-          latitudeDelta: 0.0922,
-          longitudeDelta: 0.0421,
-        }}
-      >
-        <Marker
-          coordinate={{
-            latitude: volunteerData.location.latitude,
-            longitude: volunteerData.location.longitude,
-          }}
-          title={volunteerData.title}
-          description={volunteerData.location.address}
-        />
-      </MapView>
-    );
   };
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <ActivityIndicator size="large" color="#FF6B00" />
+      </View>
+    );
+  }
+
+  if (!volunteer) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <Text style={styles.errorText}>봉사 정보를 찾을 수 없습니다.</Text>
+      </View>
+    );
+  }
 
   return (
-    <ScrollView style={styles.container}>
-      {/* 헤더 이미지 */}
-      <Image
-        source={{ uri: 'https://via.placeholder.com/400x200' }}
-        style={styles.headerImage}
-      />
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>봉사 상세 정보</Text>
+      </View>
 
-      {/* 기본 정보 */}
-      <View style={styles.section}>
-        <Text style={styles.title}>{volunteerData.title}</Text>
-        <View style={styles.dateTimeContainer}>
-          <FontAwesome name="calendar" size={16} color="#666" />
-          <Text style={styles.dateTimeText}>{volunteerData.date}</Text>
-          <FontAwesome name="clock-o" size={16} color="#666" style={styles.timeIcon} />
-          <Text style={styles.dateTimeText}>{volunteerData.time}</Text>
-        </View>
-        <View style={styles.statusContainer}>
-          <Text style={styles.statusText}>{volunteerData.status}</Text>
-          <Text style={styles.volunteerCount}>
-            {volunteerData.currentVolunteers}/{volunteerData.maxVolunteers}명 참여
+      <ScrollView style={styles.content}>
+        <View style={styles.section}>
+          <Text style={styles.title}>{volunteer.prgramSj}</Text>
+          <Text style={[styles.status, { color: volunteer.progrmSttusSe === '모집중' ? '#4CAF50' : '#FF6B00' }]}>
+            {volunteer.progrmSttusSe}
           </Text>
         </View>
-      </View>
 
-      {/* 설명 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>봉사 내용</Text>
-        <Text style={styles.description}>{volunteerData.description}</Text>
-      </View>
-
-      {/* 지도 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>위치</Text>
-        {renderMap()}
-        <Text style={styles.address}>{volunteerData.location.address}</Text>
-      </View>
-
-      {/* 요구사항 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>요구사항</Text>
-        {volunteerData.requirements.map((req, index) => (
-          <View key={index} style={styles.requirementItem}>
-            <FontAwesome name="check-circle" size={16} color="#FF6B00" />
-            <Text style={styles.requirementText}>{req}</Text>
+        <View style={styles.section}>
+          <View style={styles.infoRow}>
+            <Ionicons name="calendar-outline" size={20} color="#666" />
+            <Text style={styles.infoText}>
+              {formatDate(volunteer.actBeginDe)} ~ {formatDate(volunteer.actEndDe)}
+            </Text>
           </View>
-        ))}
-      </View>
 
-      {/* 연락처 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>연락처</Text>
-        <View style={styles.contactItem}>
-          <FontAwesome name="user" size={16} color="#666" />
-          <Text style={styles.contactText}>{volunteerData.contact.name}</Text>
-        </View>
-        <View style={styles.contactItem}>
-          <FontAwesome name="phone" size={16} color="#666" />
-          <Text style={styles.contactText}>{volunteerData.contact.phone}</Text>
-        </View>
-        <View style={styles.contactItem}>
-          <FontAwesome name="envelope" size={16} color="#666" />
-          <Text style={styles.contactText}>{volunteerData.contact.email}</Text>
-        </View>
-      </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="time-outline" size={20} color="#666" />
+            <Text style={styles.infoText}>{volunteer.actTime}</Text>
+          </View>
 
-      {/* 신청 버튼 */}
-      <TouchableOpacity style={styles.applyButton}>
-        <Text style={styles.applyButtonText}>봉사 신청하기</Text>
-      </TouchableOpacity>
-    </ScrollView>
+          <View style={styles.infoRow}>
+            <Ionicons name="location-outline" size={20} color="#666" />
+            <Text style={styles.infoText}>{volunteer.actPlace}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Ionicons name="people-outline" size={20} color="#666" />
+            <Text style={styles.infoText}>모집인원: {volunteer.rcritNmpr}명</Text>
+          </View>
+        </View>
+
+        {location && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>활동 장소</Text>
+            <MapView
+              provider={PROVIDER_GOOGLE}
+              style={styles.map}
+              initialRegion={{
+                latitude: location.latitude,
+                longitude: location.longitude,
+                latitudeDelta: 0.01,
+                longitudeDelta: 0.01,
+              }}
+              customMapStyle={[
+                {
+                  "featureType": "all",
+                  "elementType": "labels.text.fill",
+                  "stylers": [
+                    {
+                      "color": "#333333"
+                    }
+                  ]
+                },
+                {
+                  "featureType": "all",
+                  "elementType": "labels.text.stroke",
+                  "stylers": [
+                    {
+                      "visibility": "off"
+                    }
+                  ]
+                },
+                {
+                  "featureType": "administrative",
+                  "elementType": "geometry.fill",
+                  "stylers": [
+                    {
+                      "color": "#fefefe"
+                    }
+                  ]
+                },
+                {
+                  "featureType": "landscape",
+                  "elementType": "geometry",
+                  "stylers": [
+                    {
+                      "color": "#f5f5f5"
+                    }
+                  ]
+                },
+                {
+                  "featureType": "poi",
+                  "elementType": "geometry",
+                  "stylers": [
+                    {
+                      "color": "#f5f5f5"
+                    }
+                  ]
+                },
+                {
+                  "featureType": "road.highway",
+                  "elementType": "geometry.fill",
+                  "stylers": [
+                    {
+                      "color": "#ffffff"
+                    }
+                  ]
+                },
+                {
+                  "featureType": "road.highway",
+                  "elementType": "geometry.stroke",
+                  "stylers": [
+                    {
+                      "color": "#d9d9d9"
+                    }
+                  ]
+                },
+                {
+                  "featureType": "road.arterial",
+                  "elementType": "geometry",
+                  "stylers": [
+                    {
+                      "color": "#ffffff"
+                    }
+                  ]
+                },
+                {
+                  "featureType": "road.local",
+                  "elementType": "geometry",
+                  "stylers": [
+                    {
+                      "color": "#ffffff"
+                    }
+                  ]
+                },
+                {
+                  "featureType": "transit",
+                  "elementType": "geometry",
+                  "stylers": [
+                    {
+                      "color": "#f5f5f5"
+                    }
+                  ]
+                },
+                {
+                  "featureType": "water",
+                  "elementType": "geometry",
+                  "stylers": [
+                    {
+                      "color": "#c9c9c9"
+                    }
+                  ]
+                }
+              ]}
+            >
+              <Marker
+                coordinate={{
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                }}
+                title={volunteer.prgramSj}
+                description={volunteer.actPlace}
+                pinColor="#FF6B00"
+              />
+            </MapView>
+            <Text style={styles.addressText}>{volunteer.actPlace}</Text>
+          </View>
+        )}
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>프로그램 내용</Text>
+          <Text style={styles.description}>{volunteer.progrmCn}</Text>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>연락처 정보</Text>
+          <View style={styles.infoRow}>
+            <Ionicons name="call-outline" size={20} color="#666" />
+            <Text style={styles.infoText}>{volunteer.telno || '연락처 정보 없음'}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="mail-outline" size={20} color="#666" />
+            <Text style={styles.infoText}>{volunteer.email || '이메일 정보 없음'}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="home-outline" size={20} color="#666" />
+            <Text style={styles.infoText}>{volunteer.postAdres || '주소 정보 없음'}</Text>
+          </View>
+        </View>
+
+        <TouchableOpacity style={styles.applyButton}>
+          <Text style={styles.applyButtonText}>신청하기</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -144,110 +294,90 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  headerImage: {
-    width: '100%',
-    height: 200,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  backButton: {
+    marginRight: 16,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  content: {
+    flex: 1,
   },
   section: {
-    backgroundColor: '#fff',
-    padding: 20,
-    marginBottom: 10,
+    backgroundColor: 'white',
+    padding: 16,
+    marginBottom: 8,
   },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 10,
+    color: '#333',
+    marginBottom: 8,
   },
-  dateTimeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  dateTimeText: {
+  status: {
     fontSize: 16,
-    color: '#666',
-    marginLeft: 5,
-  },
-  timeIcon: {
-    marginLeft: 15,
-  },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  statusText: {
-    backgroundColor: '#FF6B00',
-    color: '#fff',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 15,
-    fontSize: 14,
-    marginRight: 10,
-  },
-  volunteerCount: {
-    fontSize: 14,
-    color: '#666',
+    fontWeight: '500',
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 15,
+    color: '#333',
+    marginBottom: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  infoText: {
+    fontSize: 16,
+    color: '#666',
+    marginLeft: 12,
+    flex: 1,
   },
   description: {
     fontSize: 16,
-    lineHeight: 24,
     color: '#333',
+    lineHeight: 24,
   },
   map: {
-    width: '100%',
+    width: Dimensions.get('window').width - 32,
     height: 200,
-    marginBottom: 10,
     borderRadius: 8,
+    marginTop: 8,
   },
-  mapPlaceholder: {
-    width: '100%',
-    height: 200,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 8,
-    marginBottom: 10,
-  },
-  address: {
+  addressText: {
     fontSize: 14,
     color: '#666',
-  },
-  requirementItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  requirementText: {
-    fontSize: 16,
-    marginLeft: 10,
-    color: '#333',
-  },
-  contactItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  contactText: {
-    fontSize: 16,
-    marginLeft: 10,
-    color: '#333',
+    marginTop: 8,
+    textAlign: 'center',
   },
   applyButton: {
     backgroundColor: '#FF6B00',
-    padding: 15,
+    margin: 16,
+    padding: 16,
     borderRadius: 8,
-    margin: 20,
     alignItems: 'center',
   },
   applyButtonText: {
-    color: '#fff',
+    color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF0000',
+    textAlign: 'center',
+    margin: 16,
   },
 }); 

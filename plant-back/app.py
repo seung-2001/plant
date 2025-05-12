@@ -1,3 +1,5 @@
+import logging
+logging.basicConfig(level=logging.DEBUG)
 from flask import Flask, request, jsonify,send_from_directory
 from flask_jwt_extended import JWTManager, create_access_token
 import os
@@ -9,29 +11,33 @@ import requests  #  1365 API 연동을 위한 모듈
 import xmltodict #  XML을 JSON처럼 다루게 해줌
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from flask import jsonify
+import urllib.parse
 
+
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 # Flask 애플리케이션 객체 생성
 app = Flask(__name__)
-CORS(app, resources={
-    r"/*": {
-        "origins": "*",
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
-        "expose_headers": ["Content-Type", "Authorization", "Accept"],
-        "supports_credentials": True,
-        "max_age": 3600
-    }
-})
+CORS(app, origins="*")  # 모든 도메인에서 접근 가능하게 설정
 
+
+app.logger.setLevel(logging.DEBUG)
 
 # 비밀번호 해시화
 hashed_password = generate_password_hash("my_secure_password")
 
-# 비밀번호 검증
+
+# 비밀번호 검증 (입력한 비밀번호와 해시된 비밀번호 비교)
 is_valid = check_password_hash(hashed_password, "my_secure_password")
 print(is_valid)  # True 출력
+
+# 다른 비밀번호 비교
+is_valid = check_password_hash(hashed_password, "wrong_password")
+print(is_valid)  # False 출력
 
 # 비밀번호 검증 함수
 def verify_password(plain_password, hashed_password):
@@ -41,29 +47,35 @@ def verify_password(plain_password, hashed_password):
 # 환경 변수로부터 설정 읽어오기
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'default_jwt_secret_key')
-app.config['CLOUD_SQL_CONNECTION_NAME'] = os.getenv('CLOUD_SQL_CONNECTION_NAME', 'flask-app-kd:us-central1:hsk719')
 
 # Flask-JWT 설정
 jwt = JWTManager(app)
 
-# DB 인스턴스 (local 또는 cloud)
-db = Database("local")  
+# DB 인스턴스 (local)
+db = Database("prod")  
 
+# flask 내부 print/log도 gunicorn 로그에 잘 보임
+logging.debug("디버깅 메시지입니다.")
+logging.info("정보 메시지입니다.")
 
 @app.before_request
 def log_request_data():
-    data = request.get_json(silent=True)
-    print(f"Request URL: {request.url}")
-    print(f"Request Method: {request.method}")
-    print(f"Request Headers: {dict(request.headers)}")
-    print(f"Request Data: {data}")
-    print(f"Request Remote Address: {request.remote_addr}")
-    print(f"Request User Agent: {request.user_agent}")
+    if request.method == 'GET':
+        return None
+    data = request.get_json()
+    print(f"Request data (from get_json): {data}")
+    print(f"Request data (raw): {request.data}")
+     # 비밀번호를 포함하여 전체 요청 데이터를 출력
+     
+@app.before_request
+def log_request_info():
+    logging.debug('Headers: %s', request.headers)
+    logging.debug('Body: %s', request.get_data())
 
 # 기본 경로 설정
 @app.route('/')
 def home():
-    return jsonify({"message": "Hello, Google Cloud!"})
+    return jsonify({"message": "Hello, AWS!"})
 
 
 @app.route('/favicon.ico')
@@ -93,21 +105,26 @@ def login():
             return jsonify({'error': '이메일과 비밀번호가 필요합니다.'}), 400
         
         # DB에서 사용자 정보 가져오기
-        user = db.get_user(email)  # db.get_user()가 리스트 또는 딕셔너리 형태로 반환되는지 확인
+        user = db.get_user(email)  # db.get_user()는 이메일로 사용자 정보를 반환한다고 가정
         
         if not user:
             return jsonify({'error': '사용자를 찾을 수 없습니다.'}), 401
         
-        print(f"DB에 저장된 해시: {user[0]['password']}")
+        # user가 리스트인지 딕셔너리인지 확인 후 접근 방식 수정
+        print(f"user 타입: {type(user)}")  # user가 리스트인지 딕셔너리인지 확인
+        
+        # user 데이터가 리스트라면 첫 번째 요소 사용
+        if isinstance(user, list):
+            user = user[0]
+            
+        print(f"DB에 저장된 해시: {user['password']}")
         print(f"입력된 비밀번호: {password}")
-        print(f"비교 결과: {check_password_hash(user[0]['password'], password)}")
+        print(f"비교 결과: {check_password_hash(user['password'], password)}")
+
+        # 비밀번호 비교: 비밀번호가 일치하지 않으면 오류 반환
+        if not check_password_hash(user['password'], password):
+            return jsonify({'error': '비밀번호가 일치하지 않습니다.'}), 401
         
-        # 비밀번호 비교
-        # user[0]에 접근할 때 데이터 구조를 정확히 확인하고 수정할 것
-        if not check_password_hash(user[0]['password'], password):
-            return jsonify({'error': '비밀번호가 일치하지 않습니다. 입력값: {}'.format(user[0]['password'])}), 401
-        
-    
         # JWT 토큰 생성
         access_token = create_access_token(identity=email)
         return jsonify({'access_token': access_token}), 200  # JWT 토큰 반환
@@ -127,11 +144,10 @@ def register():
         data = request.get_json()
         email = data.get('email')
         password = data.get('password')
-        name = data.get('name')
 
         # 필수 입력값 확인
-        if not email or not password or not name:
-            return jsonify({'error': '이메일, 비밀번호, 이름이 필요합니다.'}), 400
+        if not email or not password:
+            return jsonify({'error': '이메일과 비밀번호가 필요합니다.'}), 400
 
         # 이메일, 비밀번호 길이 제한
         MAX_EMAIL_LENGTH = 255
@@ -149,13 +165,14 @@ def register():
             return jsonify({'error': '이미 등록된 이메일입니다.'}), 409
 
         # 비밀번호 해싱
-        hashed_password = generate_password_hash(password)
+        hashed_password = generate_password_hash(password, method='scrypt')
         
+        # 확인용 로그
         print(check_password_hash(hashed_password,password)) # True 
         print(check_password_hash(hashed_password, "wrong")) # False
 
         # DB에 사용자 등록
-        result, status_code = db.register_user(email, hashed_password, name)
+        result, status_code = db.register_user(email, hashed_password)
 
         if status_code == 201:
             return jsonify({"message": "회원가입이 완료되었습니다."}), 201
@@ -187,21 +204,16 @@ def get_user_by_email(email):
   
 
 
-# 프로필 조회
+# 프로필 조회(4/11에 추가함)
 @app.route('/user/profile', methods=['GET'])
-@app.route('/user', methods=['GET'])
 @jwt_required()
 def get_profile():
-    try:
-        user_email = get_jwt_identity()
-        user = db.get_user(user_email)
-        if user:        
-            return jsonify(user), 200
-        else:
-            return jsonify({"error": "사용자 정보를 찾을 수 없습니다."}), 404
-    except Exception as e:
-        print(f"프로필 조회 중 오류 발생: {e}")
-        return jsonify({"error": "프로필 조회 중 오류가 발생했습니다."}), 500
+    user_email = get_jwt_identity()  # JWT로부터 사용자 이메일 추출
+    user = db.get_user(user_email)   # DB에서 사용자 정보 조회
+    if user:
+        return jsonify(user), 200
+    else:
+        return jsonify({"error": "사용자 정보를 찾을 수 없습니다."}), 404
     
 # 비밀번호 수정
 @app.route('/user/password', methods=['PUT'])
@@ -241,44 +253,199 @@ def delete_account():
         return jsonify({"message": "회원탈퇴가 완료되었습니다."}), 200
     else:
         return jsonify({"error": "회원탈퇴에 실패했습니다."}), 500
+    
 
+# 1365 api (검색하여 봉사참여정보목록조회)
+@app.route('/volunteer/meals', methods=['GET'])
+def get_volunteer_meals():
+    # API 요청 파라미터 설정
+    
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    keyword = request.args.get('keyword')
+    
+    params = {
+        'ServiceKey': '여기에_실제_서비스키_입력',  # 공공데이터 포털에서 발급받은 서비스 키
+        'SchCateGu': 'prormSj',
+        'keyword': keyword,
+        'schSign1': '3000000',
+        'schprogrmBgnde': start_date,
+        'progrmEndde': end_date
+    }
+    
+    url = 'http://openapi.1365.go.kr/openapi/service/rest/VolunteerPartcptnService/getVltrSearchWordList'
 
-
-# ✅ 1365 봉사 상세 API 연결 (예시: 프로그램 등록번호로 조회)
-@app.route('/volunteer/json/<program_id>', methods=['GET'])
-def get_volunteer_info_json(program_id):
-    SERVICE_KEY = 'h4XNdMwfUs1nWLTnhUWKAC5KXPn7p3XkIzj+VffsnUsIBlbspne1+kNS8Mz3D/uRG9WSoWPCV6XDP42lLlsUvw=='
-    url = f'http://openapi.1365.go.kr/openapi/service/getVltrPartcptnDtl?ServiceKey={SERVICE_KEY}&progrmRegistNo={program_id}'
-
+    
+    
     try:
-        response = requests.get(url)
-        response.encoding = 'utf-8'
-
-        #  XML을 파이썬 dict로 파싱
-        data_dict = xmltodict.parse(response.text)
+        headers = {
+            'Accept': 'application/xml',
+            'Content-Type': 'application/xml'
+        }
+        # API 호출
+        response = requests.get(url, params=params, headers=headers)
         
-        #  prgramSj (봉사제목) 가져오기
-        item = data_dict['response']['body']['items']['item']
+        # 디버깅을 위한 출력
+        print("Status Code:", response.status_code)
+        print("Response Content:", response.content.decode('utf-8'))
         
-        # 봉사 활동 정보 DB에 저장
-        progrmRegistNo = item.get('progrmRegistNo')
-        prgramSj = item.get('prgramSj')
-        actBeginDe = item.get('actBeginDe')
-        actEndDe = item.get('actEndDe')
-        actPlace = item.get('actPlace')
-
-        # DB에 저장 (삽입 쿼리)
-        db.insert_volunteer_info(progrmRegistNo, prgramSj, actBeginDe, actEndDe, actPlace)
-
-        return jsonify({
-            "title": prgramSj,
-            "start_date": actBeginDe,
-            "end_date": actEndDe,
-            "location": actPlace
-        })
+        # 응답 상태 코드 확인
+        if response.status_code != 200:
+            return jsonify({
+                'error': f'API 요청 실패: {response.status_code}',
+                'content': response.content.decode('utf-8')
+            }), response.status_code
+            
+        # XML 응답을 딕셔너리로 변환
+        dict_data = xmltodict.parse(response.content)
+        
+        # 응답 구조 확인
+        if 'response' not in dict_data:
+            return jsonify({
+                'error': 'Invalid response format',
+                'content': dict_data
+            }), 500
+            
+        # 결과 데이터 추출 및 정제
+        result = {
+            'status': dict_data['response']['header']['resultMsg'],
+            'total_count': dict_data['response']['body']['totalCount'],
+            'items': []
+        }
+        
+        # items 데이터가 있는 경우에만 처리
+        if dict_data['response']['body'].get('items'):
+            items = dict_data['response']['body']['items'].get('item', [])
+            # 단일 항목인 경우 리스트로 변환
+            if isinstance(items, dict):
+                items = [items]
+            result['items'] = items
+        
+        return jsonify(result, 200, {'Content-Type':'application/json'})
+    
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': f'Request failed: {str(e)}'}), 500
+    except xmltodict.expat.ExpatError as e:
+        return jsonify({'error': f'XML parsing failed: {str(e)}'}), 500
     except Exception as e:
-        print("❌ API 호출 또는 XML 파싱 실패:", e)
-        return jsonify({"error": "API 호출 또는 XML 파싱 실패"}), 500
+        return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
+    
+    
+#1365 api(기간별 봉사 참여 정보 목록 조회)
+@app.route('/volunteer/period', methods=['GET'])
+def get_volunteer_period():
+    service_key = '여기에_서비스키_입력'
+    start_date = request.args.get('start_date')  # 예: 20250101
+    end_date = request.args.get('end_date')      # 예: 20250131
+
+    params = {
+        'ServiceKey': service_key,
+        'schprogrmBgnde': start_date,
+        'progrmEndde': end_date,
+        'numOfRows': 10,
+        'pageNo': 1
+    }
+
+    url = 'http://openapi.1365.go.kr/openapi/service/rest/VolunteerPartcptnService/getVltrPeriodSrvcList'
+
+    return call_volunteer_api(url, params)
+#1365 api(지역별 봉사 참여 정보 목록 조회)
+@app.route('/volunteer/area', methods=['GET'])
+def get_volunteer_area():
+    service_key = '여기에_서비스키_입력'
+    sido = request.args.get('sido')  # 예: 서울특별시
+    gugun = request.args.get('gugun')  # 예: 강남구
+
+    params = {
+        'ServiceKey': service_key,
+        'schSign1': sido,
+        'schSign2': gugun,
+        'numOfRows': 10,
+        'pageNo': 1
+    }
+
+    url = 'http://openapi.1365.go.kr/openapi/service/rest/VolunteerPartcptnService/getVltrAreaList'
+
+    return call_volunteer_api(url, params)
+
+# 1365 api(분야별 봉사 참여 정보 목록 조회)
+@app.route('/volunteer/category', methods=['GET'])
+def get_volunteer_category():
+    service_key = '여기에_서비스키_입력'
+    category = request.args.get('category')  # 예: 환경정화
+
+    params = {
+        'ServiceKey': service_key,
+        'schCateGu': category,
+        'numOfRows': 10,
+        'pageNo': 1
+    }
+
+    url = 'http://openapi.1365.go.kr/openapi/service/rest/VolunteerPartcptnService/getVltrCategoryList'
+
+    return call_volunteer_api(url, params)
+
+#1365 api (봉사 참여 정보 상세 조회)
+@app.route('/volunteer/detail', methods=['GET'])
+def get_volunteer_detail():
+    service_key = '여기에_서비스키_입력'
+    progrmRegistNo = request.args.get('progrmRegistNo')  # 고유 프로그램 ID
+
+    params = {
+        'ServiceKey': service_key,
+        'progrmRegistNo': progrmRegistNo
+    }
+
+    url = 'http://openapi.1365.go.kr/openapi/service/rest/VolunteerPartcptnService/getVltrPartcptnItem'
+
+    return call_volunteer_api(url, params)
+
+def call_volunteer_api(url, params):
+    try:
+        headers = {
+            'Accept': 'application/xml',
+            'Content-Type': 'application/xml'
+        }
+        response = requests.get(url, params=params, headers=headers)
+
+        print("Status Code:", response.status_code)
+        print("Response Content:", response.content.decode('utf-8'))
+
+        if response.status_code != 200:
+            return jsonify({
+                'error': f'API 요청 실패: {response.status_code}',
+                'content': response.content.decode('utf-8')
+            }), response.status_code
+
+        dict_data = xmltodict.parse(response.content)
+
+        if 'response' not in dict_data:
+            return jsonify({
+                'error': 'Invalid response format',
+                'content': dict_data
+            }), 500
+
+        result = {
+            'status': dict_data['response']['header']['resultMsg'],
+            'total_count': dict_data['response']['body'].get('totalCount', 0),
+            'items': []
+        }
+
+        if dict_data['response']['body'].get('items'):
+            items = dict_data['response']['body']['items'].get('item', [])
+            if isinstance(items, dict):
+                items = [items]
+            result['items'] = items
+
+        return jsonify(result, 200, {'Content-Type': 'application/json'})
+
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': f'Request failed: {str(e)}'}), 500
+    except xmltodict.expat.ExpatError as e:
+        return jsonify({'error': f'XML parsing failed: {str(e)}'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Unexpected error: {str(e)}'}), 500
+
     
 # 게시판 관련 API
 
@@ -286,190 +453,105 @@ def get_volunteer_info_json(program_id):
 @app.route('/posts', methods=['POST'])
 @jwt_required()
 def create_post():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "요청 데이터가 없습니다."}), 400
-            
-        title = data.get('title')
-        content = data.get('content')
-        author_email = get_jwt_identity()
+    data = request.get_json() # JSON 데이터 받기
+    title = data['title']
+    content = data['content']
+    author_email = get_jwt_identity()  # JWT로부터 사용자 이메일 추출
 
-        if not title or not content:
-            return jsonify({"error": "제목과 내용을 모두 입력해주세요."}), 400
-
-        result = db.insert_post(title, content, author_email)
-        if result:
-            return jsonify({"message": "게시글이 등록되었습니다."}), 201
-        else:
-            return jsonify({"error": "게시글 등록에 실패했습니다."}), 500
-    except Exception as e:
-        print(f"게시글 작성 중 오류 발생: {e}")
-        return jsonify({"error": "게시글 작성 중 오류가 발생했습니다."}), 500
+    db.insert_post(title, content, author_email)
+    return jsonify({"message": "게시글이 등록되었습니다."}), 201
 
 # 글 목록 조회
 @app.route('/posts', methods=['GET'])
 def get_posts():
-    try:
-        posts = db.get_all_posts()
-        return jsonify(posts), 200
-    except Exception as e:
-        print(f"게시글 목록 조회 중 오류 발생: {e}")
-        return jsonify({"error": "게시글 목록을 불러오는 중 오류가 발생했습니다."}), 500
+    posts = db.get_all_posts()
+    return jsonify(posts)
 
 # 글 상세
 @app.route('/posts/<int:post_id>', methods=['GET'])
 def get_post(post_id):
-    try:
-        post = db.get_post(post_id)
-        if not post:
-            return jsonify({"error": "글을 찾을 수 없습니다."}), 404
-            
-        comments = db.get_comments(post_id)
+    post = db.get_post(post_id)
+    comments = db.get_comments(post_id)
+    if post:
         return jsonify({
             "post": post,
             "comments": comments
-        }), 200
-    except Exception as e:
-        print(f"게시글 상세 조회 중 오류 발생: {e}")
-        return jsonify({"error": "게시글을 불러오는 중 오류가 발생했습니다."}), 500
+        })
+    else:
+        return jsonify({"error": "글을 찾을 수 없습니다."}), 404
 
 # 댓글 작성 (JWT 로그인 필요)
 @app.route('/posts/<int:post_id>/comment', methods=['POST'])
 @jwt_required()
 def add_comment(post_id):
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "요청 데이터가 없습니다."}), 400
-            
-        content = data.get('content')
-        author_email = get_jwt_identity()
+    data = request.get_json()
+    content = data.get('content')
+    author_email = get_jwt_identity()
 
-        if not content:
-            return jsonify({"error": "댓글 내용을 입력해주세요."}), 400
+    if not content:
+        return jsonify({"error": "댓글 내용을 입력해주세요."}), 400
 
-        result = db.insert_comment(post_id, content, author_email)
-        if result:
-            return jsonify({"message": "댓글이 등록되었습니다."}), 201
-        else:
-            return jsonify({"error": "댓글 등록에 실패했습니다."}), 500
-    except Exception as e:
-        print(f"댓글 작성 중 오류 발생: {e}")
-        return jsonify({"error": "댓글 작성 중 오류가 발생했습니다."}), 500
+    db.insert_comment(post_id, content, author_email)
+    return jsonify({"message": "댓글이 등록되었습니다."}), 201
 
 # 글 수정 (JWT 로그인 필요)
 @app.route('/posts/<int:post_id>', methods=['PUT'])
 @jwt_required()
 def update_post(post_id):
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "요청 데이터가 없습니다."}), 400
-            
-        title = data.get('title')
-        content = data.get('content')
-        author_email = get_jwt_identity()
-        
-        # 글 작성자 확인
-        post = db.get_post(post_id)
-        if not post:
-            return jsonify({"error": "글을 찾을 수 없습니다."}), 404
-        if post['author_email'] != author_email:
-            return jsonify({"error": "글 수정 권한이 없습니다."}), 403
+    data = request.get_json()
+    title = data.get('title')
+    content = data.get('content')
     
-        result = db.update_post(post_id, title, content)
-        if result:
-            return jsonify({"message": "게시글이 수정되었습니다."}), 200
-        else:
-            return jsonify({"error": "게시글 수정에 실패했습니다."}), 500
-    except Exception as e:
-        print(f"게시글 수정 중 오류 발생: {e}")
-        return jsonify({"error": "게시글 수정 중 오류가 발생했습니다."}), 500
+    # 글 수정
+    result = db.update_post(post_id, title, content)
+    if result:
+        return jsonify({"message": "게시글이 수정되었습니다."}), 200
+    else:
+        return jsonify({"error": "게시글 수정에 실패했습니다."}), 400
 
-# 글 삭제 (JWT 로그인 필요)
+# 글 삭제 (JWT 로그인 필요) -> 오류 뜸 
 @app.route('/posts/<int:post_id>', methods=['DELETE'])
 @jwt_required()
 def delete_post(post_id):
-    try:
-        author_email = get_jwt_identity()
-        
-        # 글 작성자 확인
-        post = db.get_post(post_id)
-        if not post:
-            return jsonify({"error": "글을 찾을 수 없습니다."}), 404
-        if post['author_email'] != author_email:
-            return jsonify({"error": "글 삭제 권한이 없습니다."}), 403
-            
-        result = db.delete_post(post_id)
-        if result:
-            return jsonify({"message": "게시글이 삭제되었습니다."}), 200
-        else:
-            return jsonify({"error": "게시글 삭제에 실패했습니다."}), 500
-    except Exception as e:
-        print(f"게시글 삭제 중 오류 발생: {e}")
-        return jsonify({"error": "게시글 삭제 중 오류가 발생했습니다."}), 500
+    print(f"POST request body: {request.get_data()}")
+    result = db.delete_post(post_id)
+    if result:
+        return jsonify({"message": "게시글이 삭제되었습니다."}), 200
+    else:
+        return jsonify({"error": "게시글 삭제에 실패했습니다."}), 400
     
-# 댓글 수정 (JWT 로그인 필요)
+    
+# 댓글 수정 (JWT 로그인 필요) -> 오류뜸 
 @app.route('/posts/<int:post_id>/comment/<int:comment_id>', methods=['PUT'])
 @jwt_required()
 def update_comment(post_id, comment_id):
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "요청 데이터가 없습니다."}), 400
-            
-        content = data.get('content')
-        author_email = get_jwt_identity()
+    data = request.get_json()
+    content = data.get('content')
 
-        if not content:
-            return jsonify({"error": "댓글 내용을 입력해주세요."}), 400
-            
-        # 댓글 작성자 확인
-        comment = db.get_comment(comment_id)
-        if not comment:
-            return jsonify({"error": "댓글을 찾을 수 없습니다."}), 404
-        if comment['author_email'] != author_email:
-            return jsonify({"error": "댓글 수정 권한이 없습니다."}), 403
+    if not content:
+        return jsonify({"error": "댓글 내용을 입력해주세요."}), 400
 
-        result = db.update_comment(comment_id, content)
-        if result:
-            return jsonify({"message": "댓글이 수정되었습니다."}), 200
-        else:
-            return jsonify({"error": "댓글 수정에 실패했습니다."}), 500
-    except Exception as e:
-        print(f"댓글 수정 중 오류 발생: {e}")
-        return jsonify({"error": "댓글 수정 중 오류가 발생했습니다."}), 500
+    # 댓글 수정
+    result = db.update_comment(comment_id, content)
+    if result:
+        return jsonify({"message": "댓글이 수정되었습니다."}), 200
+    else:
+        return jsonify({"error": "댓글 수정에 실패했습니다."}), 400
     
-# 댓글 삭제 (JWT 로그인 필요)
+# 댓글 삭제 (JWT 로그인 필요) -> 오류뜸 
 @app.route('/posts/<int:post_id>/comment/<int:comment_id>', methods=['DELETE'])
 @jwt_required()
 def delete_comment(post_id, comment_id):
-    try:
-        author_email = get_jwt_identity()
-        
-        # 댓글 작성자 확인
-        comment = db.get_comment(comment_id)
-        if not comment:
-            return jsonify({"error": "댓글을 찾을 수 없습니다."}), 404
-        if comment['author_email'] != author_email:
-            return jsonify({"error": "댓글 삭제 권한이 없습니다."}), 403
-            
-        result = db.delete_comment(comment_id)
-        if result:
-            return jsonify({"message": "댓글이 삭제되었습니다."}), 200
-        else:
-            return jsonify({"error": "댓글 삭제에 실패했습니다."}), 500
-    except Exception as e:
-        print(f"댓글 삭제 중 오류 발생: {e}")
-        return jsonify({"error": "댓글 삭제 중 오류가 발생했습니다."}), 500
+    result = db.delete_comment(comment_id)
+    if result:
+        return jsonify({"message": "댓글이 삭제되었습니다."}), 200
+    else:
+        return jsonify({"error": "댓글 삭제에 실패했습니다."}), 400
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    print(f"서버가 http://127.0.0.1:{port} 에서 실행됩니다.")
-    app.run(debug=True, host='0.0.0.0', port=port)
-print(f"내용", flush=True)
-    
+    app.run(host='0.0.0.0', port=5000, debug=True)
+print("내용", flush=True)
 
+    
 

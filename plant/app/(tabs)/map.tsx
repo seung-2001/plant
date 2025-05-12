@@ -12,6 +12,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useUserLocation from '../hooks/useUserLocation';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { fetchVolunteerMeals, VolunteerMeal } from '../../services/volunteerService';
+import Geocoder from "react-native-geocoding";
+
+
+// Google Maps API 키 설정
+Geocoder.init("AIzaSyDZAfEAzvDgy6AUR0ZosNREDOEq8wSv720");
 
 interface VolunteerPlace {
   id: string;
@@ -35,59 +41,62 @@ export default function MapScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const [showNearbyOnly, setShowNearbyOnly] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<VolunteerPlace | null>(null);
+  const [volunteerMeals, setVolunteerMeals] = useState<VolunteerMeal[]>([]);
+  const [loading, setLoading] = useState(true);
   const bottomSheetRef = useRef<BottomSheet>(null);
   const snapPoints = useMemo(() => ['30%'], []);
 
   useEffect(() => {
-    // TODO: API에서 봉사활동 장소 데이터 가져오기
-    const mockPlaces: VolunteerPlace[] = [
-      {
-        id: '1',
-        name: '행복요양원',
-        latitude: 37.5665,
-        longitude: 126.9780,
-        address: '서울시 중구 세종대로 110',
-        type: 'nursing_home',
-        date: '2024-03-15',
-        participants: 5,
-        maxParticipants: 10,
-      },
-      {
-        id: '2',
-        name: '사랑어린이집',
-        latitude: 37.5666,
-        longitude: 126.9781,
-        address: '서울시 중구 세종대로 111',
-        type: 'child_care',
-        date: '2024-03-16',
-        participants: 3,
-        maxParticipants: 8,
-      },
-      {
-        id: '3',
-        name: '희망복지관',
-        latitude: 37.5667,
-        longitude: 126.9782,
-        address: '서울시 중구 세종대로 112',
-        type: 'disabled_facility',
-        date: '2024-03-17',
-        participants: 7,
-        maxParticipants: 12,
-      },
-      {
-        id: '4',
-        name: '청계천 환경정화',
-        latitude: 37.5668,
-        longitude: 126.9783,
-        address: '서울시 중구 청계천로',
-        type: 'environment',
-        date: '2024-03-18',
-        participants: 15,
-        maxParticipants: 20,
-      },
-    ];
-    setPlaces(mockPlaces);
+    loadVolunteerMeals();
   }, []);
+
+  const loadVolunteerMeals = async () => {
+    try {
+      setLoading(true);
+      const response = await fetchVolunteerMeals({
+        start_date: '2024-03-01',
+        end_date: '2024-12-31'
+      });
+      
+      if (response.items) {
+        setVolunteerMeals(response.items);
+        // 주소를 좌표로 변환
+        const placesWithCoordinates = await Promise.all(
+          response.items.map(async (item: VolunteerMeal) => {
+            if (item.actPlace) {
+              try {
+                const response = await Geocoder.from(item.actPlace);
+                const { lat, lng } = response.results[0].geometry.location;
+                return {
+                  id: item.progrmRegistNo,
+                  name: item.prgramSj,
+                  latitude: lat,
+                  longitude: lng,
+                  address: item.actPlace,
+                  type: 'environment', // 기본값으로 설정
+                  date: `${item.actBeginDe.substring(0, 4)}-${item.actBeginDe.substring(4, 6)}-${item.actBeginDe.substring(6, 8)}`,
+                  participants: 0,
+                  maxParticipants: parseInt(item.rcritNmpr) || 0
+                };
+              } catch (error) {
+                console.error('주소 변환 실패:', error);
+                return null;
+              }
+            }
+            return null;
+          })
+        );
+        
+        const validPlaces = placesWithCoordinates.filter((place): place is VolunteerPlace => place !== null);
+        setPlaces(validPlaces);
+      }
+    } catch (error) {
+      console.error('봉사 정보 로드 실패:', error);
+      Alert.alert('오류', '봉사 정보를 불러오는 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleMarkerPress = useCallback((place: VolunteerPlace) => {
     setSelectedPlace(place);
@@ -179,14 +188,9 @@ export default function MapScreen() {
   const handleBottomSheetPress = useCallback(() => {
     if (selectedPlace) {
       router.push({
-        pathname: '/volunteer-detail',
+        pathname: '/volunteer/[id]',
         params: {
-          id: selectedPlace.id,
-          name: selectedPlace.name,
-          address: selectedPlace.address,
-          date: selectedPlace.date,
-          participants: selectedPlace.participants,
-          maxParticipants: selectedPlace.maxParticipants
+          id: selectedPlace.id
         }
       });
     }
