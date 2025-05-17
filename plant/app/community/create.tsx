@@ -59,12 +59,30 @@ export default function CreatePostScreen() {
     }
 
     try {
-      await createPost({
-        title,
-        content,
-        author_email: user?.email || ''
-      });
-      router.back();
+      console.log('게시글 작성 시작, 사용자 정보:', user);
+      
+      if (!user?.email) {
+        Alert.alert('오류', '로그인 정보를 찾을 수 없습니다. 다시 로그인해주세요.');
+        return;
+      }
+      
+      const postData = {
+        title: title.trim(),
+        content: content.trim(),
+        author_email: user.email
+      };
+      
+      console.log('게시글 데이터:', postData);
+      
+      const createdPost = await createPost(postData);
+      console.log('게시글 작성 성공:', createdPost);
+      
+      Alert.alert('성공', '게시글이 작성되었습니다.', [
+        { 
+          text: '확인', 
+          onPress: () => router.back()
+        }
+      ]);
     } catch (error) {
       console.error('게시글 작성 실패:', error);
       Alert.alert('오류', '게시글 작성 중 오류가 발생했습니다.');

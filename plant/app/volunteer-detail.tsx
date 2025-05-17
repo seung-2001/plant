@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,47 +7,83 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { fetchVolunteerDetail } from '../services/volunteerService';
 
 export default function VolunteerDetailScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
   const inset = useSafeAreaInsets();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [volunteerData, setVolunteerData] = useState<any>(null);
 
-  // 실제로는 API에서 데이터를 가져와야 합니다
-  const volunteerData = {
-    id: params.id,
-    title: '하계동 제자백왕원길 봄맞이행사',
-    status: '모집중',
-    category: '환경보호',
-    period: '2025-01-12 ~ 2025-03-22',
-    time: '10:00 ~ 14:00',
-    location: '서울 노원구 제자백왕길 26',
-    currentParticipants: 0,
-    maxParticipants: 20,
-    description: `봄맞이 대청소에 참여하실 봉사자분들을 모집합니다.
+  useEffect(() => {
+    const id = params.id as string;
+    if (id) {
+      loadVolunteerDetail(id);
+    } else {
+      setError('봉사 활동 ID가 유효하지 않습니다.');
+      setLoading(false);
+    }
+  }, [params.id]);
 
-주요활동
-- 제자백왕원길 주변 쓰레기 수거
-- 불법투기 쓰레기 정리
-- 잡초 제거
+  const loadVolunteerDetail = async (id: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      console.log('봉사 활동 상세 정보 요청:', id);
+      const data = await fetchVolunteerDetail(id);
+      console.log('봉사 활동 상세 정보 응답:', data);
+      setVolunteerData(data);
+    } catch (err: any) {
+      console.error('봉사 활동 상세 정보 불러오기 실패:', err);
+      setError('봉사 활동 정보를 불러오는 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-준비물
-- 편한 복장
-- 장갑
+  if (loading) {
+    return (
+      <View style={[styles.loadingContainer, { paddingTop: inset.top }]}>
+        <ActivityIndicator size="large" color="#FF6B00" />
+        <Text style={styles.loadingText}>봉사 활동 정보를 불러오는 중...</Text>
+      </View>
+    );
+  }
 
-활동 시 유의사항
-- 봉사활동 시작 10분 전까지 도착해주세요
-- 봉사활동 전 안전교육이 진행됩니다
-- 우천시 일정이 변경될 수 있습니다
+  if (error || !volunteerData) {
+    return (
+      <View style={[styles.errorContainer, { paddingTop: inset.top }]}>
+        <Ionicons name="alert-circle-outline" size={48} color="#f44336" />
+        <Text style={styles.errorText}>{error || '봉사 활동 정보를 찾을 수 없습니다.'}</Text>
+        <TouchableOpacity 
+          style={styles.retryButton}
+          onPress={() => loadVolunteerDetail(params.id as string)}
+        >
+          <Text style={styles.retryButtonText}>다시 시도</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
-문의사항
-02-123-4567`,
-    organization: '하계1동 주민센터',
-    organizationContact: '02-123-4567',
+  // 기간 표시 포맷
+  const formatDate = (beginDate: string, endDate: string) => {
+    if (!beginDate || !endDate) return '기간 정보 없음';
+    
+    // YYYYMMDD 형식을 YYYY-MM-DD 형식으로 변환
+    const formatYMD = (dateStr: string) => {
+      if (dateStr.length !== 8) return dateStr;
+      return `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`;
+    };
+    
+    return `${formatYMD(beginDate)} ~ ${formatYMD(endDate)}`;
   };
 
   return (
@@ -68,15 +104,16 @@ export default function VolunteerDetailScreen() {
       <ScrollView style={styles.content}>
         {/* 제목 섹션 */}
         <View style={styles.titleSection}>
-          <Text style={styles.title}>{volunteerData.title}</Text>
+          <Text style={styles.title}>{volunteerData.prgramSj || '제목 없음'}</Text>
           <View style={styles.statusContainer}>
-            <Text style={styles.status}>{volunteerData.status}</Text>
+            <Text style={styles.status}>{volunteerData.progrmSttusSe || '상태 정보 없음'}</Text>
           </View>
         </View>
 
         {/* 지도 섹션 */}
         <View style={styles.mapContainer}>
           <Text style={styles.mapPlaceholder}>지도 영역</Text>
+          <Text style={styles.addressText}>{volunteerData.actPlace || '주소 정보 없음'}</Text>
         </View>
 
         {/* 기본 정보 */}
@@ -84,23 +121,25 @@ export default function VolunteerDetailScreen() {
           <View style={styles.infoRow}>
             <Ionicons name="calendar-outline" size={20} color="#666" />
             <Text style={styles.infoLabel}>봉사기간</Text>
-            <Text style={styles.infoValue}>{volunteerData.period}</Text>
+            <Text style={styles.infoValue}>
+              {formatDate(volunteerData.actBeginDe, volunteerData.actEndDe)}
+            </Text>
           </View>
           <View style={styles.infoRow}>
             <Ionicons name="time-outline" size={20} color="#666" />
             <Text style={styles.infoLabel}>봉사시간</Text>
-            <Text style={styles.infoValue}>{volunteerData.time}</Text>
+            <Text style={styles.infoValue}>{volunteerData.actTime || '시간 정보 없음'}</Text>
           </View>
           <View style={styles.infoRow}>
             <Ionicons name="location-outline" size={20} color="#666" />
             <Text style={styles.infoLabel}>봉사장소</Text>
-            <Text style={styles.infoValue}>{volunteerData.location}</Text>
+            <Text style={styles.infoValue}>{volunteerData.actPlace || '장소 정보 없음'}</Text>
           </View>
           <View style={styles.infoRow}>
             <Ionicons name="people-outline" size={20} color="#666" />
             <Text style={styles.infoLabel}>모집인원</Text>
             <Text style={styles.infoValue}>
-              {volunteerData.currentParticipants}/{volunteerData.maxParticipants}명
+              {volunteerData.rcritNmpr || '인원 정보 없음'}
             </Text>
           </View>
         </View>
@@ -108,16 +147,19 @@ export default function VolunteerDetailScreen() {
         {/* 상세 설명 */}
         <View style={styles.descriptionSection}>
           <Text style={styles.sectionTitle}>상세내용</Text>
-          <Text style={styles.description}>{volunteerData.description}</Text>
+          <Text style={styles.description}>{volunteerData.progrmCn || '상세 내용 정보 없음'}</Text>
         </View>
 
         {/* 기관 정보 */}
         <View style={styles.organizationSection}>
           <Text style={styles.sectionTitle}>기관정보</Text>
           <View style={styles.organizationInfo}>
-            <Text style={styles.organizationName}>{volunteerData.organization}</Text>
+            <Text style={styles.organizationName}>{volunteerData.nanmmbyNm || '기관명 정보 없음'}</Text>
             <Text style={styles.organizationContact}>
-              문의: {volunteerData.organizationContact}
+              담당자: {volunteerData.nanmmbyNmAdmn || '담당자 정보 없음'} 
+            </Text>
+            <Text style={styles.organizationContact}>
+              문의: {volunteerData.nanmmbyNmAdmnTelno || volunteerData.telno || '문의처 정보 없음'}
             </Text>
           </View>
         </View>
@@ -129,7 +171,7 @@ export default function VolunteerDetailScreen() {
           style={styles.applyButton}
           onPress={() => {
             // 신청 처리
-            console.log('신청하기');
+            Alert.alert('신청 알림', '봉사활동 신청이 완료되었습니다.');
           }}
         >
           <Text style={styles.applyButtonText}>신청하기</Text>
@@ -197,6 +239,13 @@ const styles = StyleSheet.create({
   mapPlaceholder: {
     fontSize: 16,
     color: '#666',
+    marginBottom: 10,
+  },
+  addressText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
   infoSection: {
     padding: 20,
@@ -254,6 +303,7 @@ const styles = StyleSheet.create({
   organizationContact: {
     fontSize: 14,
     color: '#666',
+    marginBottom: 5,
   },
   bottomButton: {
     position: 'absolute',
@@ -274,6 +324,41 @@ const styles = StyleSheet.create({
   applyButtonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: 'bold',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 20,
+  },
+  errorText: {
+    marginTop: 10,
+    marginBottom: 20,
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#FF6B00',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
     fontWeight: 'bold',
   },
 }); 

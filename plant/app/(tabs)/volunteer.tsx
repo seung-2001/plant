@@ -20,29 +20,67 @@ export default function VolunteerScreen() {
     try {
       setLoading(true);
       setError(null);
+      
+      // 오늘 날짜
+      const today = new Date();
+      const startDate = today.toISOString().split('T')[0]; // YYYY-MM-DD 형식
+      
+      // 1년 후 날짜
+      const endDate = new Date(today);
+      endDate.setFullYear(today.getFullYear() + 1);
+      const endDateStr = endDate.toISOString().split('T')[0]; // YYYY-MM-DD 형식
+      
+      console.log(`날짜 범위: ${startDate} ~ ${endDateStr}`);
+      
       const response = await fetchVolunteerMeals({
-        start_date: '2024-03-01',
-        end_date: '2024-12-31'
+        start_date: startDate,
+        end_date: endDateStr
       });
       
-      if (response.items) {
+      console.log('응답 처리:', response);
+      
+      if (response && response.items && response.items.length > 0) {
         setMeals(response.items);
+        console.log(`${response.items.length}개의 봉사 정보를 불러왔습니다.`);
       } else {
+        console.warn('봉사 정보가 없습니다:', response);
         setError('봉사 정보를 불러올 수 없습니다.');
-        Alert.alert('에러', '봉사 정보를 불러올 수 없습니다.');
+        Alert.alert('알림', '현재 등록된 봉사 정보가 없습니다.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('봉사자 목록 로드 실패:', error);
-      setError('봉사 정보를 불러오는 중 오류가 발생했습니다.');
+      setError(error.message || '봉사 정보를 불러오는 중 오류가 발생했습니다.');
       Alert.alert('에러', '봉사 정보를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
   };
 
-  const formatDate = (dateStr: string) => {
+  // 빈 데이터일 경우 대체 UI를 보여줍니다
+  const renderEmptyComponent = () => (
+    <View style={styles.emptyContainer}>
+      <Ionicons name="alert-circle-outline" size={48} color="#9E9E9E" />
+      <Text style={styles.emptyText}>봉사 정보가 없습니다.</Text>
+      <TouchableOpacity 
+        style={styles.retryButton}
+        onPress={loadVolunteers}
+      >
+        <Text style={styles.retryButtonText}>다시 시도</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const formatDate = (dateStr: string | undefined) => {
     if (!dateStr) return '';
-    return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
+    // 이미 포맷이 YYYY-MM-DD 인 경우 그대로 반환
+    if (dateStr.includes('-')) return dateStr;
+    try {
+      // YYYYMMDD 형식을 YYYY-MM-DD로 변환
+      return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
+    } catch (error) {
+      console.error('날짜 형식 변환 실패:', dateStr, error);
+      return dateStr || ''; // 변환 실패 시 원본 반환 또는 빈 문자열
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -50,11 +88,27 @@ export default function VolunteerScreen() {
       case '모집중':
         return '#4CAF50';
       case '모집완료':
+      case '접수마감':
         return '#FF6B00';
       case '모집마감':
+      case '완료':
         return '#9E9E9E';
+      case '자원봉사자 모집중':
+        return '#4CAF50';
       default:
         return '#666666';
+    }
+  };
+
+  // 봉사 상태 표시 변환 함수
+  const formatStatus = (status: string) => {
+    switch (status) {
+      case '자원봉사자 모집중':
+        return '모집중';
+      case '접수마감':
+        return '모집완료';
+      default:
+        return status || '상태 미정';
     }
   };
 
@@ -70,9 +124,9 @@ export default function VolunteerScreen() {
       }}
     >
       <View style={styles.cardHeader}>
-        <Text style={styles.placeName}>{item.prgramSj}</Text>
+        <Text style={styles.placeName}>{item.prgramSj || '제목 없음'}</Text>
         <Text style={[styles.status, { color: getStatusColor(item.progrmSttusSe) }]}>
-          {item.progrmSttusSe}
+          {formatStatus(item.progrmSttusSe)}
         </Text>
       </View>
       
@@ -85,17 +139,24 @@ export default function VolunteerScreen() {
 
       <View style={styles.infoRow}>
         <Ionicons name="time-outline" size={16} color="#666" />
-        <Text style={styles.infoText}>{item.actTime}</Text>
+        <Text style={styles.infoText}>
+          {item.actWkdy ? `${item.actWkdy}, ` : ''}{item.actTime || '시간 정보 없음'}
+        </Text>
       </View>
 
       <View style={styles.infoRow}>
         <Ionicons name="location-outline" size={16} color="#666" />
-        <Text style={styles.infoText}>{item.actPlace}</Text>
+        <Text style={styles.infoText}>{item.actPlace || '장소 정보 없음'}</Text>
       </View>
 
       <View style={styles.infoRow}>
         <Ionicons name="people-outline" size={16} color="#666" />
-        <Text style={styles.infoText}>모집인원: {item.rcritNmpr}명</Text>
+        <Text style={styles.infoText}>모집인원: {item.rcritNmpr || '미정'}명</Text>
+      </View>
+
+      <View style={styles.infoRow}>
+        <Ionicons name="business-outline" size={16} color="#666" />
+        <Text style={styles.infoText}>{item.nanmmbyNm || '주최기관 정보 없음'}</Text>
       </View>
 
       <View style={styles.infoRow}>
@@ -105,22 +166,39 @@ export default function VolunteerScreen() {
     </TouchableOpacity>
   );
 
-  if (loading) return <ActivityIndicator style={{ marginTop: 40 }} />;
-  if (error) return <Text style={{ color: 'red', margin: 20 }}>{error}</Text>;
-
   return (
     <View style={[styles.container, { paddingTop: inset.top }]}> 
       <View style={styles.header}>
         <Text style={styles.title}>봉사 활동</Text>
       </View>
-      <FlatList
-        data={meals}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.progrmRegistNo}
-        contentContainerStyle={styles.listContainer}
-        refreshing={loading}
-        onRefresh={loadVolunteers}
-      />
+      
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4CAF50" />
+          <Text style={styles.loadingText}>봉사 정보를 불러오는 중...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color="#FF6B6B" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={loadVolunteers}
+          >
+            <Text style={styles.retryButtonText}>다시 시도</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={meals}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.progrmRegistNo}
+          contentContainerStyle={styles.listContainer}
+          refreshing={loading}
+          onRefresh={loadVolunteers}
+          ListEmptyComponent={renderEmptyComponent}
+        />
+      )}
     </View>
   );
 }
@@ -143,6 +221,7 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: 16,
+    flexGrow: 1,
   },
   card: {
     backgroundColor: 'white',
@@ -187,5 +266,52 @@ const styles = StyleSheet.create({
     color: '#666',
     marginLeft: 8,
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    minHeight: 300,
+  },
+  emptyText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 20,
   },
 }); 

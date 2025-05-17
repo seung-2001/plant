@@ -3,7 +3,7 @@
 // - 봉사 활동 통계 표시
 // - 봉사 활동 기록 목록 표시
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,10 +13,14 @@ import {
   Image,
   Switch,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons, FontAwesome } from "@expo/vector-icons";
 import { useAuth } from '../../context/auth';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { getUserPosts } from '../services/communityService';
+import type { Post } from '../types';
+import { formatRelativeTime as formatTimeAgo } from '../utils/dateUtils';
 
 // 임시 데이터
 const MY_STORIES = [
@@ -31,17 +35,7 @@ const MY_STORIES = [
   },
 ];
 
-const MY_POSTS = [
-  {
-    id: 1,
-    content: '이번 주말 봉사활동 함께하실 분 계신가요?',
-    date: '2024-03-21',
-    likes: 15,
-    comments: 3,
-  },
-];
-
-// 임시 봉사 활동 데이터
+// 임시 데이터 - 봉사 활동
 const MY_ACTIVITIES = [
   {
     id: '1',
@@ -67,9 +61,45 @@ const MY_ACTIVITIES = [
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<'activities' | 'content' | 'settings'>('activities');
-  const [contentType, setContentType] = useState<'stories' | 'posts'>('stories');
+  const [contentType, setContentType] = useState<'stories' | 'posts'>('posts');
   const [pushNotifications, setPushNotifications] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
+  
+  const [userPosts, setUserPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 게시물 불러오기 함수
+  const fetchUserPosts = useCallback(async () => {
+    if (!user?.email) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      console.log('게시물 불러오기 시작:', user.email);
+      const posts = await getUserPosts(user.email);
+      console.log('사용자 게시물 가져오기 성공:', posts);
+      setUserPosts(posts);
+    } catch (err: any) {
+      console.error('사용자 게시물 가져오기 실패:', err);
+      setError('게시물을 불러오는 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.email]);
+
+  // 화면에 포커스가 있을 때마다 데이터 새로고침
+  useFocusEffect(
+    useCallback(() => {
+      console.log('프로필 화면 포커스:', activeTab);
+      if (activeTab === 'content' && user?.email) {
+        fetchUserPosts();
+      }
+      return () => {
+        // 화면이 언포커스될 때 정리 작업
+      };
+    }, [activeTab, fetchUserPosts, user?.email])
+  );
 
   // 봉사 활동 통계 계산
   const totalHours = MY_ACTIVITIES.reduce((sum, activity) => sum + activity.hours, 0);
@@ -86,48 +116,67 @@ export default function ProfileScreen() {
   };
 
   const renderStories = () => {
-    return MY_STORIES.map((story) => (
-      <TouchableOpacity
-        key={story.id}
-        style={styles.storyItem}
-        onPress={() => router.push(`/community/${story.id}`)}
-      >
-        <Image source={{ uri: story.image }} style={styles.storyImage} />
-        <View style={styles.storyContent}>
-          <Text style={styles.storyTitle}>{story.title}</Text>
-          <Text style={styles.storyPreview} numberOfLines={2}>
-            {story.content}
-          </Text>
-          <View style={styles.storyFooter}>
-            <Text style={styles.storyDate}>{story.date}</Text>
-            <View style={styles.storyStats}>
-              <FontAwesome name="heart" size={14} color="#FF6B00" />
-              <Text style={styles.storyStatText}>{story.likes}</Text>
-              <FontAwesome name="comment" size={14} color="#666" style={styles.commentIcon} />
-              <Text style={styles.storyStatText}>{story.comments}</Text>
-            </View>
-          </View>
-        </View>
-      </TouchableOpacity>
-    ));
+    // 스토리 기능은 아직 구현되지 않았으므로 안내 메시지 표시
+    return (
+      <View style={styles.emptyContentContainer}>
+        <Ionicons name="book-outline" size={48} color="#ccc" />
+        <Text style={styles.emptyContentText}>아직 작성한 스토리가 없습니다.</Text>
+      </View>
+    );
   };
 
   const renderPosts = () => {
-    return MY_POSTS.map((post) => (
-      <View key={post.id} style={styles.storyItem}>
-        <Text style={styles.postContent}>{post.content}</Text>
-        <View style={styles.postFooter}>
-          <Text style={styles.postDate}>{post.date}</Text>
-          <View style={styles.postStats}>
-            <TouchableOpacity style={styles.statButton}>
-              <Text>❤️ {post.likes}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.statButton}>
-              <Text>💬 {post.comments}</Text>
-            </TouchableOpacity>
-          </View>
+    if (loading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF9500" />
+          <Text style={styles.loadingText}>게시물을 불러오는 중...</Text>
         </View>
-      </View>
+      );
+    }
+
+    if (error) {
+      return (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color="#f44336" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={fetchUserPosts}
+          >
+            <Text style={styles.retryButtonText}>다시 시도</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (userPosts.length === 0) {
+      return (
+        <View style={styles.emptyContentContainer}>
+          <Ionicons name="chatbubble-outline" size={48} color="#ccc" />
+          <Text style={styles.emptyContentText}>아직 작성한 게시물이 없습니다.</Text>
+          <TouchableOpacity 
+            style={styles.createButton}
+            onPress={() => router.push('/community/create')}
+          >
+            <Text style={styles.createButtonText}>게시물 작성하기</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return userPosts.map((post) => (
+      <TouchableOpacity 
+        key={post.id} 
+        style={styles.storyItem}
+        onPress={() => router.push(`/community/${post.id}`)}
+      >
+        <Text style={styles.postTitle}>{post.title}</Text>
+        <Text style={styles.postContent} numberOfLines={3}>{post.content}</Text>
+        <View style={styles.postFooter}>
+          <Text style={styles.postDate}>{formatTimeAgo(post.created_at)}</Text>
+        </View>
+      </TouchableOpacity>
     ));
   };
 
@@ -299,14 +348,14 @@ export default function ProfileScreen() {
           style={styles.profileImage}
         />
         <View style={styles.profileInfo}>
-          <Text style={styles.userName}>{user?.email || '사용자'}</Text>
+          <Text style={styles.userName}>{user?.user_name || user?.email || '사용자'}</Text>
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>{totalHours}</Text>
               <Text style={styles.statLabel}>봉사시간</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{MY_STORIES.length + MY_POSTS.length}</Text>
+              <Text style={styles.statNumber}>{userPosts.length}</Text>
               <Text style={styles.statLabel}>작성글</Text>
             </View>
           </View>
@@ -325,7 +374,10 @@ export default function ProfileScreen() {
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'content' && styles.activeTab]}
-          onPress={() => setActiveTab('content')}
+          onPress={() => {
+            setActiveTab('content');
+            fetchUserPosts(); // 작성글 탭 선택 시 데이터 새로고침
+          }}
         >
           <Text style={[styles.tabText, activeTab === 'content' && styles.activeTabText]}>
             작성글
@@ -647,5 +699,71 @@ const styles = StyleSheet.create({
   activeContentTypeText: {
     color: '#fff',
   },
+  postTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  emptyContentContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    marginTop: 10,
+    minHeight: 200,
+  },
+  emptyContentText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 10,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  createButton: {
+    backgroundColor: '#FF9500',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  createButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+  },
+  loadingText: {
+    marginTop: 10,
+    color: '#666',
+  },
+  errorContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+  },
+  errorText: {
+    marginTop: 10,
+    marginBottom: 20,
+    color: '#666',
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#FF9500',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  }
 }); 
  
